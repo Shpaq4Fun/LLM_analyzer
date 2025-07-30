@@ -3,23 +3,25 @@
 import os
 from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_chroma import Chroma
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
 
 class RAGBuilder:
     def __init__(self):
         self.index = None
+        self.embedding_model="all-MiniLM-L6-v2"
 
     def _log(self, queue, message):
         """Helper to put a log message in the queue."""
         queue.put(("log", {"sender": "RAGBuilder", "message": message}))
 
-    def build_index(self, knowledge_base_paths, queue, persist_directory):
+    def build_index(self, knowledge_base_paths, queue, persist_directory, embedding_model="all-MiniLM-L6-v2"):
         """
         Builds the RAG index from the specified knowledge base paths.
         Accepts a list of paths to index.
         Uses a queue to send progress updates back to the main thread.
         """
+        self.embedding_model=embedding_model
         try:
             all_documents = []
             for knowledge_base_path in knowledge_base_paths:
@@ -30,6 +32,8 @@ class RAGBuilder:
                 from langchain_community.document_loaders import TextLoader
                 loader = DirectoryLoader(knowledge_base_path, glob="**/*.md", loader_cls=TextLoader, show_progress=False)
                 documents = loader.load()
+                loader1 = DirectoryLoader(knowledge_base_path, glob="**/*.py", loader_cls=TextLoader, show_progress=False)
+                documents.extend(loader1.load())
 
                 pdf_loader = DirectoryLoader(knowledge_base_path, glob="**/*.pdf", loader_cls=PyPDFLoader, show_progress=False)
                 pdf_documents = pdf_loader.load()
@@ -49,13 +53,14 @@ class RAGBuilder:
             self._log(queue, f"Total documents loaded: {len(all_documents)}")
             # 2. Split Documents
             self._log(queue, "Splitting documents into chunks...")
-            text_splitter = RecursiveCharacterTextSplitter(chunk_size=1200, chunk_overlap=300)
+            text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=500)
             chunks = text_splitter.split_documents(all_documents)
             self._log(queue, f"Split into {len(chunks)} chunks.")
 
             # 3. Generate Embeddings
             self._log(queue, "Initializing sentence-transformer for embeddings...")
-            model_name = "sentence-transformers/all-MiniLM-L6-v2"
+            # model_name = "sentence-transformers/all-MiniLM-L6-v2"
+            model_name = f"sentence-transformers/{self.embedding_model}"
             model_kwargs = {'device': 'cpu'}
             encode_kwargs = {'normalize_embeddings': False}
             embeddings = HuggingFaceEmbeddings(
@@ -88,7 +93,7 @@ class RAGBuilder:
             raise FileNotFoundError(f"Persisted index not found at: {persist_directory}")
 
         # The embedding function is needed to load the index
-        model_name = "sentence-transformers/all-MiniLM-L6-v2"
+        model_name =  f"sentence-transformers/{self.embedding_model}"
         model_kwargs = {'device': 'cpu'}
         encode_kwargs = {'normalize_embeddings': False}
         embeddings = HuggingFaceEmbeddings(

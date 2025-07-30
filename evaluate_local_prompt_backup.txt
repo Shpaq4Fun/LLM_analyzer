@@ -1,0 +1,38 @@
+
+Your current task is to evaluate the results of the last action. Based on all the information provided below, assess visually the provided images related to the execution of the last step in the pipeline. The entire pipeline of the sequence steps is provided below. Judge the progress made and insight gathered, that can allow to approach th objective. Then, recommend the next tool in the pipeline according to the JSON template:
+
+```json
+{{  
+    "action_id": "integer",  
+    "tool_name": "string",  
+    "params": "dictionary",  
+    "output_variable": "string" 
+}}```
+
+As your response return only this JSON object.
+
+Here is the information you must use for the support of evaluation:
+
+Analysis scenario desctiption: 
+{metaknowledge}
+
+RAG context from knowledge base: 
+{rag_context}
+
+RAG context from tools documentation: 
+{rag_context_tools}
+
+General objective of the analysis: 
+{objective}
+
+Current action name: 
+{last_action_name}
+
+Current action documentation : 
+{last_action_documenation}
+
+List of available tools for next actions: 
+{tools_list}
+
+Previous actions: 
+{sequence_steps}

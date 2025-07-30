@@ -28,8 +28,8 @@ This tool is a fundamental first step for analyzing any time-varying or non-stat
 | :---- | :---- | :---- | :---- | :---- |
 | data | np.ndarray | Input data dictionary containing the signal\_data and sampling\_rate. | Yes | None |
 | output\_image\_path | str | The full path to save the output PNG to. | Yes | None |
-| nperseg | int | The length of each segment. A larger value increases frequency resolution but decreases time resolution. | No | 256 |
-| noverlap | int | Number of overlapping points between segments. Usually set to 50% of nperseg. | No | 128 |
+| window | int | The length of each segment. A larger value increases frequency resolution but decreases time resolution. | No | 256 |
+| noverlap | int | Number of overlapping points between segments. Usually set to 50% of window. | No | 128 |
 
 ## **6\. Next Steps Enabled**
 
@@ -48,7 +48,7 @@ spectrogram_action = {
         "signal_data": my_signal,  
         "sampling_rate": fs,  
         "output_image_path": "./outputs/step_2_spectrogram.png",  
-        "nperseg": 512  
+        "window": 512  
     },  
     "output_variable": "spectrogram_results"  
 }

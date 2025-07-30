@@ -3,7 +3,7 @@
 # Import necessary libraries
 import numpy as np
 from scipy.stats import kurtosis, skew, jarque_bera, levy_stable
-from scipy.signal import find_peaks
+from scipy.signal import find_peaks, istft, firwin2, stft, filtfilt
 import re
 import os
 import matplotlib.pyplot as plt
@@ -74,16 +74,20 @@ def calculate_quantitative_metrics(tool_output: dict) -> dict:
     domain = tool_output.get('domain', 'unknown_domain')
     print(domain)
     if domain == 'time-series':
-        return _calculate_timeseries_stats(tool_output)
+        new_params = _calculate_timeseries_stats(tool_output)
     elif domain == 'time-frequency-matrix':
-        return _calculate_spectrogram_stats(tool_output)
+        new_params = _calculate_spectrogram_stats(tool_output)
     elif domain == 'frequency-spectrum':
-        return _calculate_spectrum_stats(tool_output)
+        new_params = _calculate_spectrum_stats(tool_output)
     elif domain == 'bi-frequency-matrix':
-        return _calculate_cyclomap_stats(tool_output)
+        new_params = _calculate_cyclomap_stats(tool_output)
+    elif domain == 'decomposed_matrix':
+        new_params = _calculate_nmf_stats(tool_output)
     else:
-        return tool_output
-
+        new_params = {}
+    tool_output["new_params"] = new_params
+    return tool_output
+    
 # === Specialized Handler Functions (Private) ===
 
 def _calculate_timeseries_stats(data_dict: dict) -> dict:
@@ -111,16 +115,16 @@ def _calculate_timeseries_stats(data_dict: dict) -> dict:
             cyclicity_strength = autocorr[dominant_period_samples] / autocorr[0]
 
     new_params = {
-        'kurtosis': kurtosis(signal),
-        'skewness': skew(signal),
-        'rms': rms_value,
-        'crest_factor': peak_value / rms_value if rms_value > 0 else 0,
+        'kurtosis': float(kurtosis(signal)),
+        'skewness': float(skew(signal)),
+        'rms': float(rms_value),
+        'crest_factor': float(peak_value / rms_value if rms_value > 0 else 0),
         "cyclicity_period_samples": int(dominant_period_samples),
         "cyclicity_strength": float(cyclicity_strength)
     }
     
-    data_dict.update(new_params)
-    return data_dict
+    # data_dict.update(new_params)
+    return new_params
 
 def _calculate_spectrum_stats(data_dict: dict) -> dict:
     """
@@ -144,8 +148,8 @@ def _calculate_spectrum_stats(data_dict: dict) -> dict:
         'dominant_frequency_hz': float(dominant_frequency_hz)
     }
     
-    data_dict.update(new_params)
-    return data_dict
+    # data_dict.update(new_params)
+    return new_params
 
 def _calculate_spectrogram_stats(data_dict: dict) -> dict:
     """
@@ -221,19 +225,19 @@ def _calculate_spectrogram_stats(data_dict: dict) -> dict:
         "peak_kurtosis_freq_hz": float(peak_sk_freq_hz),
         "peak_jarque_bera_freq_hz": float(peak_jb_freq_hz),
         "min_alpha_freq_hz": float(peak_alpha_freq_hz),
-        "selectors_data": {
-            "frequencies_hz": frequencies.tolist(),
-            "spectral_kurtosis": sk_selector.tolist(),
-            "jarque_bera": jb_selector.tolist(),
-            "alpha_stable": alpha_selector.tolist()
-        },
+        # "selectors_data": {
+        #     "frequencies_hz": frequencies.tolist(),
+        #     "spectral_kurtosis": sk_selector.tolist(),
+        #     "jarque_bera": jb_selector.tolist(),
+        #     "alpha_stable": alpha_selector.tolist()
+        # },
         "supporting_image_paths": {
             "selectors_image_path": selectors_image_path,
         }
     }
     
-    data_dict.update(new_params)
-    return data_dict
+    # data_dict.update(new_params)
+    return new_params
 
 def _calculate_cyclomap_stats(data_dict: dict) -> dict:
     """
@@ -345,21 +349,142 @@ def _calculate_cyclomap_stats(data_dict: dict) -> dict:
         "peak_kurtosis_freq_hz": float(peak_sk_freq_hz),
         "peak_jarque_bera_freq_hz": float(peak_jb_freq_hz),
         "min_alpha_freq_hz": float(peak_alpha_freq_hz),
-        "selectors_data": {
-            "frequencies_hz": carrier_frequencies.tolist(),
-            "spectral_kurtosis": sk_selector.tolist(),
-            "jarque_bera": jb_selector.tolist(),
-            "alpha_stable": alpha_selector.tolist(),
-            "cyclic_frequencies_hz": cyclic_frequencies.tolist(),
-            "sk_ies": sk_ies.tolist(),
-            "jb_ies": jb_ies.tolist(),
-            "alpha_ies": alpha_ies.tolist()
-        },
+        # "selectors_data": {
+        #     "frequencies_hz": carrier_frequencies.tolist(),
+        #     "spectral_kurtosis": sk_selector.tolist(),
+        #     "jarque_bera": jb_selector.tolist(),
+        #     "alpha_stable": alpha_selector.tolist(),
+        #     "cyclic_frequencies_hz": cyclic_frequencies.tolist(),
+        #     "sk_ies": sk_ies.tolist(),
+        #     "jb_ies": jb_ies.tolist(),
+        #     "alpha_ies": alpha_ies.tolist()
+        # },
         "supporting_image_paths": {
             "selectors_image_path": selectors_image_path,
             "ees_image_path": ees_image_path
         }
     }
     
-    data_dict.update(new_params)
-    return data_dict
+    # data_dict.update(new_params)
+    return new_params
+
+def _calculate_nmf_stats(data_dict: dict) -> dict:
+    """
+    Calculates key stats AND a suite of diagnostic selectors for a 2D spectrogram.
+    """
+    image_path = data_dict.get('image_path')
+    # Handle the case where image_path is a list
+    primary_image_path = image_path[0] if isinstance(image_path, list) else image_path
+    run_id, action_id = _extract_ids_from_path(primary_image_path)
+
+    if run_id is None or action_id is None:
+        return data_dict
+
+    primary_data_key = data_dict.get('primary_data')
+    H = data_dict.get(primary_data_key)
+    secondary_data_key = data_dict.get('secondary_data')
+    W = data_dict.get(secondary_data_key)
+    domain = data_dict.get('original_domain')
+    original_phase = data_dict.get('original_phase')
+    sampling_rate = data_dict.get('sampling_rate')
+    carrier_frequencies = data_dict.get('carrier_frequencies')
+    original_signal_data = data_dict.get('original_signal_data')
+
+    if H is None or W is None or H.size == 0 or W.size == 0:
+        return {}
+    n_components = H.shape[0]
+    kurt = np.zeros(n_components)
+    n_iter = 32
+    signals_reconstructed = []
+    
+    if domain == 'time-frequency-matrix':
+        nperseg = data_dict.get('nperseg')
+        noverlap = data_dict.get('noverlap')
+        for i in range(n_components):
+            W_comp = np.expand_dims(W[:, i], axis=1)
+            H_comp = np.expand_dims(H[i, :], axis=0)
+            reconstructed_magnitude = W_comp @ H_comp
+            if original_phase is not None and original_phase.shape == reconstructed_magnitude.shape:
+                phase = original_phase
+            else:
+                phase = np.random.randn(*reconstructed_magnitude.shape)
+            # Iteratively refine the phase
+            complex_spectrogram = reconstructed_magnitude * np.exp(1j * phase)
+            for _ in range(n_iter):
+                _, reconstructed_signal = istft(
+                    complex_spectrogram,
+                    fs=sampling_rate,
+                    nperseg=nperseg,
+                    noverlap=noverlap
+                )
+                # Re-calculate STFT to get the new phase
+                _, _, complex_spectrogram = stft(
+                    reconstructed_signal,
+                    fs=sampling_rate,
+                    nperseg=nperseg,
+                    noverlap=noverlap
+                )
+                # Enforce the target magnitude
+                complex_spectrogram = reconstructed_magnitude * (complex_spectrogram / (np.abs(complex_spectrogram) + 1e-9))
+
+            # --- 3. Final Inverse STFT ---
+            _, final_reconstructed_signal = istft(
+                complex_spectrogram,
+                fs=sampling_rate,
+                nperseg=nperseg,
+                noverlap=noverlap
+            )
+            signals_reconstructed.append(final_reconstructed_signal)
+            kurt[i] = kurtosis(final_reconstructed_signal, fisher=False)
+    elif domain == 'bi-frequency-matrix':
+        filter_order = 128
+        for i in range(n_components):
+            W_comp = W[:, i]
+
+            # --- 1. Design the Custom FIR Filter ---
+            # The W_component is our desired gain at each frequency. We normalize it to be between 0 and 1.
+            normalized_gain = (W_comp - np.min(W_comp)) / (np.max(W_comp) - np.min(W_comp) + 1e-9)
+
+            # firwin2 requires frequencies to be normalized to the Nyquist frequency.
+            nyquist = sampling_rate / 2.0
+            normalized_freqs = carrier_frequencies / nyquist
+
+            # Ensure frequencies start at 0 and end at 1 (for Nyquist)
+            freqs = np.concatenate(([0], normalized_freqs, [1]))
+            gains = np.concatenate(([0], normalized_gain, [0]))
+
+            # Design the filter
+            # The filter order must be even for firwin2
+            if filter_order % 2 != 0:
+                filter_order += 1
+            
+            filter_taps = firwin2(filter_order + 1, freqs, gains)
+
+            # --- 2. Apply the Filter to the Original Signal ---
+            filtered_signal = filtfilt(filter_taps, [1.0], original_signal_data)
+            signals_reconstructed.append(filtered_signal)
+            kurt[i] = kurtosis(filtered_signal, fisher=False)
+
+    # --- Generate and save the visual output ---
+    time_axis = np.arange(len(signals_reconstructed[0])) / sampling_rate  # Assuming all signals have the same length
+    output_image_path = os.path.join(f"./run_state/{run_id}", f"step_{action_id}_nmf_reconstruction.png")
+
+    fig, ax = plt.subplots(n_components,1,figsize=[9,7])
+    for i in range(n_components):
+        ax[i].plot(time_axis, signals_reconstructed[i])
+        ax[i].set_title(f'Reconstructed Component {i+1}')
+        ax[i].set_xlabel('Time [s]')
+        ax[i].set_ylabel('Amplitude')
+        ax[i].grid(True)
+
+    plt.savefig(output_image_path)
+    plt.close()
+
+    new_params = {
+        "kurtosis": kurt.tolist(),
+        "signals_reconstructed": signals_reconstructed,
+        "supporting_image_paths": {
+            "selectors_image_path": output_image_path
+        }
+    }
+    return new_params

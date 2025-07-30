@@ -24,7 +24,11 @@ def create_fft_spectrum(
               'image_path' (str): The path where the output image was saved.
     """
     # --- Internal logic using scipy.fft ---
-    signal_data = data.get('signal_data')
+    primary_data = data.get('primary_data')
+    if primary_data is None:
+        print("Warning: No primary data provided for create_envelope_spectrum tool.")
+
+    signal_data = data.get(primary_data)
     if signal_data is None:
         print("Warning: No signal data provided for create_fft_spectrum tool.")
 
@@ -75,7 +79,7 @@ def create_fft_spectrum(
     plt.title('FFT Spectrum')
     plt.xlabel('Frequency [Hz]')
     plt.ylabel('Amplitude')
-    plt.xlim([0, sampling_rate / 2]) # Explicitly set x-axis to Nyquist
+    plt.xlim([0, min(300,sampling_rate / 2)]) # Explicitly set x-axis to Nyquist
     plt.tight_layout()
     plt.savefig(output_image_path)
     plt.close()

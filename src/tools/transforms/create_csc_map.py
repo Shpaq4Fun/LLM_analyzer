@@ -8,24 +8,18 @@ def create_csc_map(
         output_image_path: str,
         min_alpha: int = 1,
         max_alpha: int = 200,
-        nperseg: int = 256,
+        window: int = 256,
         overlap: int = 220,
 ) -> dict:
     """
     Calculates and saves the Cyclic Spectral Coherence (CSC) map for a signal.
 
-    *** NOTE: This is a placeholder implementation for system design. ***
-    It generates a synthetic CSC map with plausible features for demonstration.
-    A full implementation would require a specialized cyclostationary analysis library
-    and would use all the provided parameters (nperseg, overlap, nfft).
-
     Args:
         signal_data (np.ndarray): 1D NumPy array containing the time-series signal.
-        sampling_rate (int): The sampling frequency of the signal in Hz.
         output_image_path (str): The full path where the output PNG image will be saved.
         min_alpha (int, optional): The minimum cyclic frequency (alpha) to calculate in Hz. Defaults to 1.
         max_alpha (int, optional): The maximum cyclic frequency (alpha) to calculate in Hz. Defaults to 200.
-        nperseg (int, optional): The length of segments for analysis. Defaults to 256.
+        window (int, optional): The length of segments for analysis. Defaults to 256.
         overlap (int, optional): Number of overlapping points between segments. Defaults to 220.
         nfft (int, optional): Length of the FFT used for each segment. Defaults to 256.
 
@@ -37,19 +31,23 @@ def create_csc_map(
               'image_path' (str): The path where the output image was saved.
     """
     # --- Placeholder Logic to Generate a Synthetic CSC Map ---
-    signal_data = data.get('signal_data')
+    primary_data = data.get('primary_data')
+    if primary_data is None:
+        print("Warning: No primary data provided for create_csc_map tool.")
+
+    signal_data = data.get(primary_data)
     if signal_data is None:
-        print("Warning: No signal data provided for create_fft_spectrum tool.")
+        print("Warning: No signal data provided for create_csc_map tool.")
 
     sampling_rate = data.get('sampling_rate')
     if sampling_rate is None:
-        print("Warning: No sampling rate provided for create_fft_spectrum tool.")
+        print("Warning: No sampling rate provided for create_csc_map tool.")
 
-    csc_map, carrier_frequencies, cyclic_frequencies = spectral_coh(signal_data[:2*sampling_rate], 
+    csc_map, carrier_frequencies, cyclic_frequencies = spectral_coh(signal_data[:min(len(signal_data), round(3*sampling_rate))],
                                                                     alphamin=min_alpha, 
                                                                     alphamax=max_alpha, 
-                                                                    nfft=nperseg, 
-                                                                    okno=nperseg, 
+                                                                    nfft=window, 
+                                                                    okno=window, 
                                                                     fs=sampling_rate, 
                                                                     nover=overlap)
     csc_map = np.abs(csc_map)
@@ -67,6 +65,8 @@ def create_csc_map(
 
     # --- Return the structured data output ---
     results = {
+        'action_name': 'create_csc_map',
+        'action_documentation_path': 'src/tools/transforms/create_csc_map.md',
         'cyclic_frequencies': cyclic_frequencies,
         'carrier_frequencies': carrier_frequencies,
         'csc_map': csc_map,
@@ -74,6 +74,8 @@ def create_csc_map(
         'primary_data': 'csc_map',
         'secondary_data': 'cyclic_frequencies',
         'tertiary_data': 'carrier_frequencies',
+        'sampling_rate': sampling_rate,
+        'original_signal_data': signal_data,
         'image_path': output_image_path
     }
 

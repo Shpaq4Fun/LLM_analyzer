@@ -5,11 +5,11 @@ import matplotlib
 matplotlib.use('TkAgg')
 
 def highpass_filter(
-    data: np.ndarray,
+    data: dict,
     output_image_path: str,
     cutoff_freq: float = 3500,
     order: int = 4
-) -> np.ndarray:
+) -> dict:
     """
     Applies a zero-phase high-pass Butterworth filter to a signal.
 
@@ -25,7 +25,11 @@ def highpass_filter(
         np.ndarray: The high-pass filtered 1D signal. Returns the original signal
                     if the cutoff frequency is invalid.
     """
-    signal_data = data.get('signal_data')
+    primary_data = data.get('primary_data')
+    if primary_data is None:
+        print("Warning: No primary data provided for create_envelope_spectrum tool.")
+
+    signal_data = data.get(primary_data)
     if signal_data is None:
         print("Warning: No signal data provided for create_signal_spectrogram tool.")
 

@@ -1,0 +1,35 @@
+'\n{\n
+"data_summary": {\n
+	"type": "vibration",\n
+	"domain": "time-series",\n
+	"sampling_frequency_hz": 19200,\n
+	"signal_length_sec": 48000.00 / 19200,\n
+	"properties": [\n
+		"non-stationary",\n
+		"noisy",\n
+		"weak damage signature"\n
+	]\n
+},\n
+"system_context": {\n
+	"type": "rolling element bearing",\n
+	"configuration": "casing measurement",\n
+	"characteristic_frequencies": {\n
+		"bpfi_ratio": null,\n
+		"bpfo_ratio": null,\n
+		"ftf_ratio": null,\n
+		"bsf_ratio": null,\n
+		"unknown_fault_frequency_hz": 12.7\n
+	}\n
+},\n
+"analysis_objective": {\n
+	"primary_goal": "extract cyclic impulsive component",\n
+	"target_fault_type": "local damage",\n
+	"target_signal_feature": "cyclic impulse",\n
+	"fallback_goal": "determine informative frequency band"\n
+},\n
+"initial_hypotheses": [\n
+	"The signal contains cyclic impulses related to local bearing damage.",\n
+	"The fault frequency is around 12.7 Hz.",\n
+	"The carrier frequency band can be observed on spectrogram or CSC map."\n
+]\n
+}\n'

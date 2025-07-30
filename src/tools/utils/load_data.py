@@ -43,7 +43,7 @@ def load_data(
             'domain': 'time-series',
             'image_path': output_image_path
         }
-
+    signal_data = signal_data[:min(len(signal_data), round(1*sampling_rate))]
     time_axis = np.arange(len(signal_data)) / sampling_rate
 
     # --- Generate and save the visual output ---

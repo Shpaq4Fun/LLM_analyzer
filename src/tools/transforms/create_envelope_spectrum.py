@@ -25,9 +25,14 @@ def create_envelope_spectrum(
               'amplitudes' (np.ndarray): Array of corresponding envelope amplitudes.
               'image_path' (str): The path where the output image was saved.
     """
-    signal_data = data.get('signal_data')
+    primary_data = data.get('primary_data')
+    if primary_data is None:
+        print("Warning: No primary data provided for create_envelope_spectrum tool.")
+
+    signal_data = data.get(primary_data)
     if signal_data is None:
         print("Warning: No signal data provided for create_envelope_spectrum tool.")
+
     sampling_rate = data.get('sampling_rate')
     if sampling_rate is None:
         print("Warning: No sampling rate provided for create_envelope_spectrum tool.")
@@ -46,55 +51,92 @@ def create_envelope_spectrum(
         return {
             'frequencies': empty_freqs,
             'amplitudes': empty_amps,
+            'domain': 'frequency-spectrum',
+            'primary_data': 'amplitudes',
+            'secondary_data': 'frequencies',
+            'sampling_rate': sampling_rate,
             'image_path': output_image_path
         }
+    if len(signal_data.shape) == 1:
+        # --- Step 1: Calculate the envelope using the Hilbert transform ---
+        # The analytic signal contains the original signal and its Hilbert transform
+        analytic_signal = hilbert(signal_data)
+        # The envelope is the absolute value (magnitude) of the analytic signal
+        envelope = np.abs(analytic_signal)
+        # Subtract the mean to remove the DC component before FFT
+        envelope_no_dc = envelope - np.mean(envelope)
+        
+        # --- Step 2: Calculate the FFT of the envelope ---
+        yf = fft(envelope_no_dc)
+        xf = fftfreq(N, 1 / sampling_rate)
 
-    # --- Step 1: Calculate the envelope using the Hilbert transform ---
-    # The analytic signal contains the original signal and its Hilbert transform
-    analytic_signal = hilbert(signal_data)
-    # The envelope is the absolute value (magnitude) of the analytic signal
-    envelope = np.abs(analytic_signal)
-    # Subtract the mean to remove the DC component before FFT
-    envelope_no_dc = envelope - np.mean(envelope)
-    
-    # --- Step 2: Calculate the FFT of the envelope ---
-    yf = fft(envelope_no_dc)
-    xf = fftfreq(N, 1 / sampling_rate)
+        # Process for a one-sided amplitude spectrum
+        positive_indices = np.where(xf >= 0)
+        xf_positive = xf[positive_indices]
+        
+        # Normalize the amplitude
+        yf_amplitude = np.abs(yf[positive_indices]) / N
+        if N % 2 == 0:
+            yf_amplitude[1:len(yf_amplitude)-1] *= 2
+        else:
+            yf_amplitude[1:] *= 2
 
-    # Process for a one-sided amplitude spectrum
-    positive_indices = np.where(xf >= 0)
-    xf_positive = xf[positive_indices]
-    
-    # Normalize the amplitude
-    yf_amplitude = np.abs(yf[positive_indices]) / N
-    if N % 2 == 0:
-        yf_amplitude[1:len(yf_amplitude)-1] *= 2
-    else:
-        yf_amplitude[1:] *= 2
+        # --- Generate and save the visual output ---
+        plt.figure(figsize=(10, 8))
+        plt.plot(xf_positive, yf_amplitude)
+        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+        plt.title('Envelope Spectrum')
+        plt.xlabel('Modulating Frequency [Hz]')
+        plt.ylabel('Amplitude')
+        # Envelope spectra are typically viewed at lower frequencies
+        # We can set a sensible default x-limit or make it a parameter later
+        plt.xlim([0, min(300, sampling_rate / 2)])
+        plt.tight_layout()
+        plt.savefig(output_image_path)
+        plt.close()
 
-    # --- Generate and save the visual output ---
-    plt.figure(figsize=(10, 8))
-    plt.plot(xf_positive, yf_amplitude)
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-    plt.title('Envelope Spectrum')
-    plt.xlabel('Modulating Frequency [Hz]')
-    plt.ylabel('Amplitude')
-    # Envelope spectra are typically viewed at lower frequencies
-    # We can set a sensible default x-limit or make it a parameter later
-    plt.xlim([0, min(500, sampling_rate / 2)])
-    plt.tight_layout()
-    plt.savefig(output_image_path)
-    plt.close()
+        # --- Return the structured data output ---
+        results = {
+            'frequencies': xf_positive,
+            'amplitudes': yf_amplitude,
+            'domain': 'frequency-spectrum',
+            'primary_data': 'amplitudes',
+            'secondary_data': 'frequencies',
+            'sampling_rate': sampling_rate,
+            'image_path': output_image_path
+        }
+    elif signal_data.shape[1] >1:
+        secondary_data = data.get('secondary_data')
+        if secondary_data is None:
+            print("Warning: No primary data provided for create_envelope_spectrum tool.")
 
-    # --- Return the structured data output ---
-    results = {
-        'frequencies': xf_positive,
-        'amplitudes': yf_amplitude,
-        'domain': 'frequency-spectrum',
-        'primary_data': 'amplitudes',
-        'secondary_data': 'frequencies',
-        'sampling_rate': sampling_rate,
-        'image_path': output_image_path
-    }
+        xf_positive = data.get(secondary_data)
+        if xf_positive is None:
+            print("Warning: No cyclic_frequencies data provided for create_envelope_spectrum tool.")
 
+        yf_amplitude = np.sum(signal_data, axis=0)
+
+        # --- Generate and save the visual output ---
+        plt.figure(figsize=(10, 8))
+        plt.plot(xf_positive, yf_amplitude)
+        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
+        plt.title('Enhanced Envelope Spectrum')
+        plt.xlabel('Modulating Frequency [Hz]')
+        plt.ylabel('Amplitude')
+        # Envelope spectra are typically viewed at lower frequencies
+        # We can set a sensible default x-limit or make it a parameter later
+        # plt.xlim([0, min(300, sampling_rate / 2)])
+        plt.tight_layout()
+        plt.savefig(output_image_path)
+        plt.close()
+
+        results = {
+            'frequencies': xf_positive,
+            'amplitudes': yf_amplitude,
+            'domain': 'frequency-spectrum',
+            'primary_data': 'amplitudes',
+            'secondary_data': 'frequencies',
+            'sampling_rate': sampling_rate,
+            'image_path': output_image_path
+        }
     return results

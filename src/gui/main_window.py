@@ -23,37 +23,31 @@ class App(ctk.CTk):
         self.rag_builder = RAGBuilder()
 
         # --- Basic Window Configuration ---
-        self.title("LLM-Orchestrated Data Analysis Pipeline")
-        self.geometry("1800x1020")
+        self.title("AIDA: AI-Driven Analyzer        LORA: LLM-Orchestrated Research Agent")
+        self.geometry("1800x1000")
         self.configure(fg_color="#1a202c")
 
         self.flowchart_blocks = {} # To store mapping of canvas item ID to action data
         self.last_flowchart_rect_id = None # To track the last block for drawing arrows
 
         # --- Grid Layout Configuration ---
-        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=4)
-        self.grid_columnconfigure(2, weight=5)
+        self.grid_columnconfigure(2, weight=4)
         self.grid_rowconfigure(1, weight=1)
 
         # --- Header ---
-        header = ctk.CTkFrame(self, fg_color="#2d3748", corner_radius=0)
-        header.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 4))
-        header_label = ctk.CTkLabel(header, text="LLM-Orchestrated Data Analysis Pipeline", font=ctk.CTkFont(size=20, weight="bold"), text_color="#f7fafc")
-        header_label.pack(pady=2)
+        header = ctk.CTkFrame(self, fg_color="#1a202c", corner_radius=0)
+        header.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 0))
+        header_label = ctk.CTkLabel(header, text="AIDA: AI-Driven Analyzer        LORA: LLM-Orchestrated Research Agent", font=ctk.CTkFont(size=20, weight="bold"), text_color="#f7fafc")
+        header_label.pack(pady=0)
 
         # --- Main Panels ---
         self._create_controls_panel()
         self._create_visualization_panel()
         self._create_log_panel()
-
-        # # --- Footer ---
-        # footer = ctk.CTkFrame(self, fg_color="#2d3748", corner_radius=0)
-        # footer.grid(row=2, column=0, columnspan=3, sticky="ew", pady=(4, 0))
-        # footer_label = ctk.CTkLabel(footer, text="© 2025 LLM Data Analyzer. All rights reserved.", text_color="#e2e8f0")
-        # footer_label.pack(pady=5)
         
-        self.log_message("System", "Welcome! Enter your analysis objective and data description to begin.")
+        self.log_message("System", "Welcome! \n\nInstructions: \n\n1. Load the data, \n2. Load RAG index (or build a new one), \n3. Enter your analysis objective and data description,\n4. Start the analysis.")
 
         # --- Threading and Queue Setup ---
         self.rag_queue = queue.Queue()
@@ -67,8 +61,8 @@ class App(ctk.CTk):
 
     def _create_panel(self, parent, row, column, rowspan=1, columnspan=1):
         """Helper function to create a consistent panel style."""
-        panel = ctk.CTkFrame(parent, fg_color="#2d3748", corner_radius=5, border_width=1, border_color="#4a5568")
-        panel.grid(row=row, column=column, rowspan=rowspan, columnspan=columnspan, sticky="nsew", padx=2, pady=2)
+        panel = ctk.CTkFrame(parent, fg_color="#1a202c", corner_radius=0, border_width=0, border_color="#2d3748")
+        panel.grid(row=row, column=column, rowspan=rowspan, columnspan=columnspan, sticky="nsew", padx=0, pady=0)
         return panel
 
     def _create_controls_panel(self):
@@ -77,37 +71,43 @@ class App(ctk.CTk):
         controls_panel.grid_rowconfigure(5, weight=1) # Allow controls to space out
 
         header = ctk.CTkLabel(controls_panel, text="Controls", font=ctk.CTkFont(size=16, weight="bold"))
-        header.grid(row=0, column=0, sticky="w", padx=10, pady=10)
+        header.grid(row=0, column=0, sticky="w", padx=5, pady=2)
 
         # Load Data Button
-        self.load_data_btn = ctk.CTkButton(controls_panel, text="Load Data File (.mat)", command=self.load_data_file)
-        self.load_data_btn.grid(row=1, column=0, sticky="ew", padx=10, pady=10)
+        self.load_data_btn = ctk.CTkButton(controls_panel, text="Load Data File (.mat)", command=self.load_data_file, fg_color=("#3182ce", "#3D5F7E"), hover_color="#2b6cb0", corner_radius=8, font=ctk.CTkFont(family="Helvetica", size=20, weight="bold"))
+        self.load_data_btn.configure(height=50)
+        self.load_data_btn.grid(row=1, column=0, sticky="ew", padx=2, pady=0)
 
         # Objective Input
         obj_label = ctk.CTkLabel(controls_panel, text="Analysis Objective:")
-        obj_label.grid(row=2, column=0, sticky="w", padx=10)
-        self.objective_input = ctk.CTkTextbox(controls_panel, height=150, fg_color="#4a5568", border_color="#5a6578")
-        self.objective_input.grid(row=3, column=0, sticky="ew", padx=10, pady=(0, 10))
+        obj_label.grid(row=2, column=0, sticky="w", padx=5)
+        self.objective_input = ctk.CTkTextbox(controls_panel, height=248, fg_color="#4a5568", border_color="#5a6578", corner_radius=0)
+        self.objective_input.grid(row=3, column=0, sticky="ew", padx=2, pady=(0, 0))
 
         # Data Description Input
         desc_label = ctk.CTkLabel(controls_panel, text="Data Description:")
-        desc_label.grid(row=4, column=0, sticky="w", padx=10)
-        self.data_description_input = ctk.CTkTextbox(controls_panel, height=150, fg_color="#4a5568", border_color="#5a6578")
-        self.data_description_input.grid(row=5, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        desc_label.grid(row=4, column=0, sticky="w", padx=5, pady=(10, 0))
+        self.data_description_input = ctk.CTkTextbox(controls_panel, height=150, fg_color="#4a5568", border_color="#5a6578", corner_radius=0)
+        self.data_description_input.grid(row=5, column=0, sticky="nsew", padx=2, pady=(0, 2))
         
         # Buttons
         button_frame = ctk.CTkFrame(controls_panel, fg_color="transparent")
-        button_frame.grid(row=6, column=0, sticky="ew", padx=10, pady=10)
+        button_frame.grid(row=6, column=0, sticky="ew", padx=0, pady=0)
         button_frame.grid_columnconfigure(0, weight=1)
+        button_frame.grid_columnconfigure(1, weight=1)
+        button_frame.grid_rowconfigure(0, weight=1)
 
-        self.build_rag_btn = ctk.CTkButton(button_frame, text="Build RAG Index from Knowledge Base", command=self.on_build_rag_index)
-        self.build_rag_btn.grid(row=0, column=0, sticky="ew", pady=(0,5))
+        self.build_rag_btn = ctk.CTkButton(button_frame, text="Build RAG Index\nfrom Knowledge Base", command=self.on_build_rag_index, fg_color=("#3182ce", "#3D5F7E"), hover_color="#2b6cb0", font=ctk.CTkFont(family="Helvetica", size=14, weight="bold"), width=180)
+        self.build_rag_btn.configure(height=50)
+        self.build_rag_btn.grid(row=0, column=0, sticky="nsew", pady=2, padx=2)
 
-        self.load_rag_btn = ctk.CTkButton(button_frame, text="Load RAG Index from File", command=self.on_load_rag_index)
-        self.load_rag_btn.grid(row=1, column=0, sticky="ew", pady=(0,5))
+        self.load_rag_btn = ctk.CTkButton(button_frame, text="Load RAG Index\nfrom File", command=self.on_load_rag_index, fg_color=("#3182ce", "#3D5F7E"), hover_color="#2b6cb0", font=ctk.CTkFont(family="Helvetica", size=14, weight="bold"), width=180)
+        self.load_rag_btn.configure(height=50)
+        self.load_rag_btn.grid(row=0, column=1, sticky="nsew", pady=2, padx=2)
 
-        self.start_btn = ctk.CTkButton(button_frame, text="Start Analysis", command=self.on_start_analysis, fg_color="#3182ce", hover_color="#2b6cb0")
-        self.start_btn.grid(row=2, column=0, sticky="ew", pady=(0,5))
+        self.start_btn = ctk.CTkButton(controls_panel, text="Start Analysis", command=self.on_start_analysis, fg_color=("#3182ce", "#3D5F7E"), hover_color="#2b6cb0", font=ctk.CTkFont(family="Helvetica", size=20, weight="bold"))
+        self.start_btn.configure(height=50)
+        self.start_btn.grid(row=7, column=0, sticky="ew", pady=2, padx=2)
 
 
     def _create_visualization_panel(self):
@@ -117,39 +117,56 @@ class App(ctk.CTk):
         viz_panel.grid_columnconfigure(0, weight=1)
 
         # Flowchart
-        flowchart_header = ctk.CTkLabel(viz_panel, text="Action Sequence Flowchart", font=ctk.CTkFont(size=16, weight="bold"))
-        flowchart_header.grid(row=0, column=0, sticky="w", padx=10, pady=5)
-        self.flowchart_canvas = ctk.CTkCanvas(viz_panel, background="#1a202c", highlightthickness=0)
-        self.flowchart_canvas.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
-
+        flowchart_header = ctk.CTkLabel(viz_panel, text="  Action Sequence Flowchart  ", font=ctk.CTkFont(size=16, weight="bold"), bg_color="#303949")
+        flowchart_header.grid(row=0, column=0, sticky="w", padx=2, pady=0)
+        self.flowchart_canvas = ctk.CTkCanvas(viz_panel, background="#303949", highlightthickness=0,scrollregion = (0,0,2000,1000))
+        self.flowchart_canvas.grid(row=1, column=0, sticky="nsew", padx=2, pady=(0, 10))
+        ctk_textbox_scrollbar = ctk.CTkScrollbar(self.flowchart_canvas, command=self.flowchart_canvas.yview)
+        ctk_textbox_scrollbar.place(relx=1,rely=0,relheight=1,anchor='ne')
+        self.flowchart_canvas.configure(yscrollcommand=ctk_textbox_scrollbar.set)
         # Plot
-        plot_header = ctk.CTkLabel(viz_panel, text="Current Action Result Plot", font=ctk.CTkFont(size=16, weight="bold"))
-        plot_header.grid(row=2, column=0, sticky="w", padx=10, pady=5)
-        self.plot_canvas = ctk.CTkCanvas(viz_panel, background="#1a202c", highlightthickness=0)
-        self.plot_canvas.grid(row=3, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        plot_header = ctk.CTkLabel(viz_panel, text="  Result Plot  ", font=ctk.CTkFont(size=16, weight="bold"), bg_color="#303949")
+        plot_header.grid(row=2, column=0, sticky="w", padx=2, pady=0)
+        self.plot_canvas = ctk.CTkCanvas(viz_panel, background="#303949", highlightthickness=0)
+        self.plot_canvas.grid(row=3, column=0, sticky="nsew", padx=2, pady=(0, 2))
 
     def _create_log_panel(self):
         log_panel = self._create_panel(self, 1, 2)
         log_panel.grid_rowconfigure(1, weight=1)
         log_panel.grid_columnconfigure(0, weight=1)
         
-        header = ctk.CTkLabel(log_panel, text="LLM Prompts & Responses", font=ctk.CTkFont(size=16, weight="bold"))
-        header.grid(row=0, column=0, sticky="w", padx=10, pady=10)
+        header = ctk.CTkLabel(log_panel, text="  Log  ", font=ctk.CTkFont(size=16, weight="bold"), bg_color="#303949")
+        header.grid(row=0, column=0, sticky="w", padx=2, pady=0)
         
-        self.log_textbox = ctk.CTkTextbox(log_panel, fg_color="#2d3748", text_color="#e2e8f0", activate_scrollbars=True)
-        self.log_textbox.grid(row=1, column=0, sticky="nsew", padx=10, pady=(0, 10))
+        self.log_textbox = ctk.CTkTextbox(log_panel, fg_color="#303949", text_color="#e2e8f0", activate_scrollbars=True, corner_radius=0, width=500)
+        self.log_textbox.grid(row=1, column=0, sticky="nsew", padx=2, pady=(0, 2))
         
         # Configure a tag for the sender's name to make it stand out
         self.log_textbox.tag_config("sender_style", foreground="#63b3ed", underline=True) # A nice light blue color
-        
+        # self.log_textbox.tag_config("llm_style", foreground="#ebebeb") # A nice light blue color
+        self.log_textbox.tag_config("translator_style", foreground="#6d9dd4") # A nice light blue color
         self.log_textbox.configure(state="disabled")
 
     def log_message(self, sender, message):
         """Appends a formatted message to the log text box."""
         self.log_textbox.configure(state="normal")
-        
         self.log_textbox.insert("end", f"{sender}:", "sender_style")
-        self.log_textbox.insert("end", f" {message}\n\n")
+        match sender:
+            case "System":
+                self.log_textbox.insert("end", f"  {message} \n\n")
+            case "Prompt Translator":
+                self.log_textbox.insert("end", f"  {message} \n\n", "translator_style")
+            case "LLM Orchestrator":
+                self.log_textbox.insert("end", f"  {message} \n\n")
+            case "User":
+                self.log_textbox.insert("end", f"  {message} \n\n")
+            case "RAGBuilder":
+                self.log_textbox.insert("end", f"  {message} \n\n")
+            case "LLM Orchestrator (Error)":
+                self.log_textbox.insert("end", f"  {message} \n\n")
+
+        # self.log_textbox.insert("end", f"{sender}:", "sender_style")
+        # self.log_textbox.insert("end", f"  {message} \n\n")
         self.log_textbox.configure(state="disabled")
         self.log_textbox.see("end") # Scroll to the end
 
@@ -167,9 +184,9 @@ class App(ctk.CTk):
             return
 
         self.log_message("User", f"Starting analysis with objective: \"{objective.strip()}\"")
-        self.log_message("System", "Backend processing would start here...")
+        # self.log_message("System", "Backend processing would start here...")
         
-        self.start_btn.configure(state="disabled")
+        # self.start_btn.configure(state="disabled")
 
         # Create a unique run ID for this analysis
         run_id = f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -187,7 +204,7 @@ class App(ctk.CTk):
         
         analysis_thread = threading.Thread(target=self.orchestrator.run_analysis_pipeline)
         analysis_thread.start()
-        self.orchestrator.delete_caches()
+        # self.orchestrator.delete_caches()
 
     def on_build_rag_index(self):
         """Opens a dialog to select the knowledge base directory and starts the RAG index build process."""
@@ -301,7 +318,7 @@ class App(ctk.CTk):
             self.log_message("System", f"Found data keys: {', '.join(self.loaded_data.keys())}")
             # Optionally, populate the data description
             self.data_description_input.delete("1.0", "end")
-            self.data_description_input.insert("1.0", f"Loaded .mat file with variables: {', '.join(self.loaded_data.keys())},\n")
+            # self.data_description_input.insert("1.0", f"Loaded .mat file with variables: {', '.join(self.loaded_data.keys())},\n")
             
             self._find_data_variables()
             # self.plot_time_series() # Removed: Plotting now handled by load_data action
@@ -451,6 +468,10 @@ class App(ctk.CTk):
         self.last_coords = [x1, y1, x2, y2]
         self.flowchart_x_offset += dynamic_block_width + self.flowchart_horizontal_spacing
 
+        image_path = data.get('image_path')
+        # --- Display the plot for the added step ---
+        self._display_image_on_plot_canvas(image_path)
+
         if self.flowchart_x_offset + dynamic_block_width > canvas.winfo_width() and canvas.winfo_width() > 0:
             self.flowchart_x_offset = 10
             self.flowchart_y_offset += self.flowchart_block_height + self.flowchart_vertical_spacing
@@ -493,7 +514,7 @@ class App(ctk.CTk):
                 image_files = []
 
             if len(image_files) == 1:
-                self.log_message("Flowchart", f"Displaying plot for {action_data.get('tool_name')} (Action ID: {action_id})")
+                # self.log_message("Flowchart", f"Displaying plot for {action_data.get('tool_name')} (Action ID: {action_id})")
                 self._display_image_on_plot_canvas(image_files[0])
             elif len(image_files) > 1:
                 self._show_plot_selection_menu(event, image_files, action_data)
@@ -525,7 +546,7 @@ class App(ctk.CTk):
         """Displays the selected plot and removes the dropdown."""
         selected_path = next((p for p in image_paths if os.path.basename(p) == choice), None)
         if selected_path:
-            self.log_message("Flowchart", f"Displaying plot {choice} for {action_data.get('tool_name')} (Action ID: {action_data.get('action_id')})")
+            # self.log_message("Flowchart", f"Displaying plot {choice} for {action_data.get('tool_name')} (Action ID: {action_data.get('action_id')})")
             self._display_image_on_plot_canvas(selected_path)
         
         menu.destroy()

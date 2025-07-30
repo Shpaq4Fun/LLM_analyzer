@@ -36,7 +36,7 @@ The CSC map is a bi-frequency representation that directly links **modulating fr
 | output\_image\_path | str | The full path to save the output PNG to. | Yes | None |
 | min\_alpha | int | The minimum cyclic frequency (alpha) to calculate, in Hz. | No | 1 |
 | max\_alpha | int | The maximum cyclic frequency (alpha) to calculate, in Hz. | No | 200 |
-| nperseg | int | The length of each segment for analysis. A larger value increases carrier frequency resolution. | No | 256 |
+| window | int | The length of each segment for analysis. A larger value increases carrier frequency resolution. | No | 256 |
 | overlap | int | Number of overlapping points between segments for analysis. | No | 220 |
 
 ## **6\. Next Steps Enabled**
@@ -58,7 +58,7 @@ csc_action = {
         },  
         "output_image_path": "./outputs/step_2_csc_map.png"
         "max_alpha": 300,  
-        "nperseg": 512  
+        "window": 512  
     },  
     "output_variable": "csc_results"  
 }

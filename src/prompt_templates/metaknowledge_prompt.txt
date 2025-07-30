@@ -31,21 +31,29 @@ Adhere strictly to the following JSON schema:
   "initial_hypotheses": ["string"]
 }}```
 
-If any of the provided variables has unrealistic values (i.e. sampling_frequency_hz = 1 Hz) try to extract information about this parameter from the USER-PROVIDED DATA DESCRIPTION.
+If any of the provided variables has unrealistic values (i.e. sampling_frequency_hz = 1 Hz) try to extract information about this parameter from the USER-PROVIDED DATA DESCRIPTION. Caution: treat all extracted numeric scalar data as integers.
 
 If any of the variables has been updated based on USER-PROVIDED DATA DESCRIPTION (i.e. missing "sampling_frequency_hz"), validate the values that may depend on it (i.e. "signal_length_sec" incorrectly calculated base on invalid, not yet updated "sampling_frequency_hz").
 
 Here is the information you must use for the conversion:
 
-GROUND TRUTH DATA STATISTICS: \\n{ground_truth_summary}
+GROUND TRUTH DATA STATISTICS: 
+{ground_truth_summary}
 
-RELEVANT CONTEXT FROM KNOWLEDGE BASE: \\n{rag_context}
+RELEVANT CONTEXT FROM KNOWLEDGE BASE: 
+{rag_context}
 
-TOOLKIT: \\n{rag_context_tools}
+RELEVANT CONTEXT FROM TOOL BASE: 
+{rag_context_tools}
 
-USER-PROVIDED DATA DESCRIPTION: \\n{user_data_description}
+TOOLKIT: 
+{tools_list}
 
-USER-PROVIDED ANALYSIS OBJECTIVE: \\n{user_analysis_objective}
+USER-PROVIDED DATA DESCRIPTION: 
+{user_data_description}
+
+USER-PROVIDED ANALYSIS OBJECTIVE: 
+{user_analysis_objective}
 
 Always formulate a fallback goal. Example: if the primary goal turns out to not be achievable (i.e. extract cyclic impulsive component), then fullfilling the fallback goal (i.e. determine informative frequency band for the component of interest) might still be useful and enable proposing further actions of the analysis pipeline.
 

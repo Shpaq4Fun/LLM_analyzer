@@ -1,0 +1,79 @@
+
+Your current task is to evaluate the results of the last action. Based on all the information provided below, assess visually the provided images related to the execution of each step, especially the last step in the pipeline. The entire pipeline of the sequence steps is provided below. Judge the progress made and insight gathered, that can allow to approach the objective. Assess, if the results allow to observe the component of interest and visualize it in an identifyable way, so that the fundamental frequency of the component of interest can be observed and compared with a datasheet of the bearing. If so, the result can be described as "final", and the analysis can be finished.
+
+Then, recommend the next tool in the pipeline according to the names of the available tools proposed below.
+
+Return a JSON object where you provide:
+1. "evaluation_summary": Description of your evaluation and proposition of the next tool (as string), 
+2. "tool_name": Name of the proposed tool selected from the list of tool names (as string),
+3. "is_final": Binary value 0/1, where 1 means that the last step reveale the results in clear enough way to interpret the component of interest, and the fault itself. If you select the value 0, then the analysis will be continued.
+4. "params": Provide a new set of parameters for the tool. If you have an idea how you want to set the specific parameters other than their default values (i.e. specific cutoff frequencies for a filter), provide them in their respective JSON fields. You can find the list of parameters in the documentation of the current action provided below. Use the actual names of the individual parameters of the tool as field names inside "params" instead of "param_1", "param_2" etc.
+5. "input_variable": Provide a name of the input variable for the proposed action, as the value of "output_variable" of the relevant step in the pipeline, not necessarily the last one. You can find the names of output variables for each step in the listing of the previous actions provided below. For example, in the sequence "load_data" -> "calculate_signal_spectrogram" -> "bandpass_filter" -> "create_envelope_spectrum", the input to the envelope spectrum should be the output of filtration step, not the output of the data loading step. 
+
+IMPORTANT: you can select "input_variable" only from results that have appropriate domain. For example:
+- spectrogram can be calculated from "domain": "time-series", but not from "domain": "frequency-spectrum"; 
+- envelope spectrum can be calculated from "domain": "time-series" or "bi-frequency-matrix" (in this case Enhanced Envelope Spectrum is calculated from the csc_map), but not from "domain": "frequency-spectrum";
+- filters can be applied to "domain": "time-series", but not from "domain": "frequency-spectrum"; 
+
+Here you have the mapping of feasible domains of results to be selected as inputs for each tool as "tool: domain", so that you can select the appropriate input for the proposed tool:
+
+- create_fft_spectrum: time-series;
+- create_envelope_spectrum: time-series or bi-frequency-matrix;
+- create_signal_spectrogram: time-series;
+- create_csc_map: time-series;
+- bandpass_filter: time-series;
+- lowpass_filter: time-series;
+- highpass_filter: time-series;
+- select_component: decomposed_matrix;
+- decompose_matrix_nmf: time-frequency-matrix or bi-frequency-matrix;
+
+IMPORTANT: If the last tool was "decompose_matrix_nmf", visually evaluate the plot supporting image related to the last step, which displays time series signals of reconstructed components. Based on that, select the one that best matches the objective of the analysis. Then, propose the tool "select_component" with the parameter "component_index" set to the index of the selected component. This is a mandatory next step after "decompose_matrix_nmf", that is effectively a post-processing step for the decomposition. The "select_component" tool will extract the selected component and output it as a time-series signal, which can be further analyzed. The "input_variable" for "select_component" should be the output of the "decompose_matrix_nmf" step.
+
+The JSON object should be formatted according to the template:
+
+```json
+{{
+  "evaluation_summary": "string",
+  "tool_name": "string",
+  "input_variable": "string",
+  "is_final": "integer",
+  "params": {{
+    "param_1": "integer",
+    "param_2": "integer"
+  }}
+}}
+```
+
+Return only this JSON object as your answer. Retain the structure of the object as it will be statically parsed.
+
+List of available tools for next actions: 
+{tools_list}
+
+General objective of the analysis: 
+{objective}
+
+Output evaluation parameters for current result: 
+{last_result_params}
+
+Previous actions: 
+{sequence_steps}
+
+History of results:
+{result_history}
+
+Here is the information you must use for the support of evaluation:
+
+Current action name: 
+{last_action_name}
+
+Current action documentation: 
+{last_action_documenation}
+
+Analysis scenario desctiption: 
+{metaknowledge}
+
+RAG context from knowledge base: 
+{rag_context}
+
+RAG context from tools documentation: 
+{rag_context_tools}
