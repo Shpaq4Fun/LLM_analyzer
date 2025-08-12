@@ -10,3 +10,5 @@ pypdf
 h5py
 langchain-chroma
 matplotlib
+google-generativeai
+Pillow
