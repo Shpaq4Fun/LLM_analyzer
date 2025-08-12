@@ -1,3 +1,13 @@
+"""
+PromptAssembler builds concrete prompts for different stages of the pipeline.
+
+- Loads text templates from src/prompt_templates
+- Assembles prompts for: metaknowledge construction, local/global evaluation,
+  tool selection, and attempt refinement
+- Some handlers are multimodal: they return a list that includes PIL.Image objects
+  to be passed to the LLM client alongside text
+"""
+
 # --- prompt_assembler.py ---
 import os, fnmatch, json
 from PIL import Image
@@ -19,23 +29,20 @@ class PromptAssembler:
         """
         if prompt_type == "METAKNOWLEDGE_CONSTRUCTION":
             temp_prompt = self._build_metaknowledge_prompt(context_bundle)
-        
+
         elif prompt_type == "EVALUATE_LOCAL_CRITERION":
             temp_prompt =  self._build_evaluate_local_prompt(context_bundle)
-            
+
         elif prompt_type == "EVALUATE_GLOBAL_CRITERION":
             temp_prompt =  self._build_evaluate_global_prompt(context_bundle)
-            
-        elif prompt_type == "SELECT_NEXT_TOOL":
-            temp_prompt =  self._build_select_tool_prompt(context_bundle)
-            
+
         elif prompt_type == "ATTEMPT_REFINEMENT":
             temp_prompt =  self._build_refinement_prompt(context_bundle)
-            
+
         else:
             temp_prompt = []
             raise ValueError(f"Unknown prompt type: {prompt_type}")
-        
+
         # final_prompt = self.templates['meta_template'].format(
         #     specific_task_prompt=temp_prompt, # A helper function to get our target schema
         # )
@@ -44,7 +51,7 @@ class PromptAssembler:
     # === Handler Methods (Private) ===
 
     def _build_metaknowledge_prompt(self, context_bundle: dict) -> str:
-    
+
     # Handler for creating the prompt that instructs the LLM to generate the
     # structured Metaknowledge JSON object.
 
@@ -58,15 +65,15 @@ class PromptAssembler:
 
     # Returns:
     #     str: The fully constructed, final prompt string.
-    
-    
+
+
     # === Step 1: Pre-computation of Ground Truth Stats ===
     # Before prompting the LLM, calculate objective facts directly from the data.
     # This prevents the LLM from having to guess these values.
-    
+
         signal_length_sec = len(context_bundle['raw_signal_data']) / context_bundle['sampling_frequency']
         number_of_samples = len(context_bundle['raw_signal_data'])
-        
+
         # Create a formatted string of these ground truth facts.
         ground_truth_summary = f"""- Signal Length: {signal_length_sec:.2f} seconds
     - Total Samples: {number_of_samples}
@@ -75,12 +82,12 @@ class PromptAssembler:
         # === Step 2: Retrieval of Relevant Context (RAG) ===
         # Query the knowledge base to find context related to the user's description.
         # This helps the LLM understand domain-specific terms like "inner race fault".
-        
+
         # Combine user texts to create a rich query for the RAG index
         rag_query = context_bundle['user_data_description'] + " " + context_bundle['user_analysis_objective']
         retrieved_docs = context_bundle['rag_retriever'].get_relevant_documents(rag_query)
         tools_list = context_bundle['tools_list']
-        retrieved_docs_tools = context_bundle['rag_retriever_tools'].get_relevant_documents(rag_query)  
+        retrieved_docs_tools = context_bundle['rag_retriever_tools'].get_relevant_documents(rag_query)
 
         # Format the retrieved documents into a single string.
         rag_context_str = "\n\n".join([f"Context Snippet {i+1}:\n{doc.page_content}" for i, doc in enumerate(retrieved_docs)])
@@ -88,7 +95,7 @@ class PromptAssembler:
         tools_list = "\n\n".join(tools_list)
         # === Step 3: Assemble the Final Prompt from a Static Template ===
         # Use a pre-defined template and inject all the gathered information.
-        
+
         final_prompt = self.templates['meta_template'].format(
             specific_task_prompt=self.templates['metaknowledge'].format(
             json_schema=self.get_metaknowledge_json_schema_as_string(), # A helper function to get our target schema
@@ -132,17 +139,17 @@ class PromptAssembler:
         # This is a complex assembly of multiple pieces of context
 
         # Combine user texts to create a rich query for the RAG index
-        rag_query = context_bundle['user_data_description'] + " " + context_bundle['user_analysis_objective']
+        rag_query = context_bundle['user_data_description'] + " " + context_bundle['user_analysis_objective'] + " " + context_bundle['last_action'].get('tool_name') + " next steps"
         retrieved_docs = context_bundle['rag_retriever'].get_relevant_documents(rag_query)
         tools_list = context_bundle['tools_list']
-        retrieved_docs_tools = context_bundle['rag_retriever_tools'].get_relevant_documents(rag_query)  
+        retrieved_docs_tools = context_bundle['rag_retriever_tools'].get_relevant_documents(rag_query)
         result_history = context_bundle['result_history']
-        
+
         # Format the retrieved documents into a single string.
         rag_context_str = "\n\n".join([f"Context Snippet {i+1}:\n{doc.page_content}" for i, doc in enumerate(retrieved_docs)])
         rag_context_str_tools = "\n\n".join([f"Context Snippet {i+1}:\n{doc.page_content}" for i, doc in enumerate(retrieved_docs_tools)])
         tools_list = "\n".join(tools_list)
-        
+
         #TODO: read context_bundle["last_result"]["image_path"] and then iterate over context_bundle["last_result"]["supporting_image_paths"] to get paths to images for evaluation
         ipath = context_bundle["last_result"]["image_path"]
         supporting_image = Image.open(ipath)
@@ -150,7 +157,7 @@ class PromptAssembler:
         image_prompts.append(ipath.split('\\')[-1])
         image_prompts.append(supporting_image)
 
-        for result in result_history:         
+        for result in result_history:
             # if len(context_bundle["last_result"]["data"].get("supporting_image_paths",[]))>0:
             if len(result["data"].get("supporting_image_paths",[]))>0:
                 image_prompts.append('Supporting images for evaluation (plots of all results):\n')
@@ -160,7 +167,7 @@ class PromptAssembler:
                     supporting_image = Image.open(supporting_image0)
                     image_prompts.append(ipath.split('/')[-1])
                     image_prompts.append(supporting_image)
-        
+
         action_documentation_path = ""
         fname = context_bundle["last_action"].get('tool_name') + ".md"
         for root, dirs, files in os.walk('src/tools/',topdown=True):
@@ -170,7 +177,7 @@ class PromptAssembler:
                     action_documentation_path = os.path.join(root, name)
                     break
 
-        
+
         with open(action_documentation_path, 'r') as f:
             fileString = f.read()
             tool_doc = fileString
@@ -191,11 +198,11 @@ class PromptAssembler:
             # Note: The image data is handled separately in the multimodal API call
             )
         )
-        
+
         # print(prompt0)
         prompt=[prompt0,*image_prompts]
         return prompt
-        
+
     def _build_select_tool_prompt(self, context: dict) -> str:
         """Handler for proposing the next action."""
         return self.templates['select_tool'].format(
@@ -205,7 +212,7 @@ class PromptAssembler:
             rag_context=context['rag_context_for_tools'],
             exclusion_list=context.get('exclusion_list', []) # From our guardrails
         )
-        
+
     # ... and so on for the other handlers (_build_evaluate_global_prompt, etc.) ...
 
     def _load_prompt_templates(self) -> dict:

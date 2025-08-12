@@ -2,28 +2,28 @@ import numpy as np
 from scipy.signal import hilbert
 from scipy.fft import fft, fftfreq
 import matplotlib.pyplot as plt
-
+import os, pickle
 def create_envelope_spectrum(
     data: dict,
     output_image_path: str
 ) -> dict:
     """
-    Calculates and saves the Envelope Spectrum of a signal.
+    Calculate and save the envelope spectrum of a signal.
 
-    This process involves applying a Hilbert transform to get the analytic signal,
-    calculating the envelope (magnitude), and then performing an FFT on the
-    mean-subtracted envelope to identify modulating frequencies.
+    Steps:
+    - Hilbert transform -> analytic signal -> magnitude (envelope)
+    - Remove DC (mean)
+    - FFT of the envelope and keep one-sided spectrum
 
-    Args:
-        data (dict): dictionary with data from previous step, with keys 
-            'signal_data', 'sampling_rate' and 'output_image_path'.
-        output_image_path (str): The full path where the output PNG image will be saved.
+    Parameters (in `data` dict expected keys):
+    - primary_data: str, name of the array key holding the input signal (1D) or matrix
+    - sampling_rate: int, sampling frequency in Hz
+    - secondary_data: str, optional, for enhanced spectrum case
 
     Returns:
-        dict: A dictionary containing the results, with the following keys:
-              'frequencies' (np.ndarray): Array of modulating frequencies in Hz.
-              'amplitudes' (np.ndarray): Array of corresponding envelope amplitudes.
-              'image_path' (str): The path where the output image was saved.
+    - dict with keys:
+        frequencies, amplitudes, domain ('frequency-spectrum'), primary_data,
+        secondary_data, sampling_rate, image_path
     """
     primary_data = data.get('primary_data')
     if primary_data is None:
@@ -42,7 +42,7 @@ def create_envelope_spectrum(
         # Handle empty signal case gracefully
         empty_freqs = np.array([])
         empty_amps = np.array([])
-        plt.figure(figsize=(10, 6))
+        plt.figure(figsize=(8, 6))
         plt.title('Envelope Spectrum (Empty Input)')
         plt.xlabel('Modulating Frequency [Hz]')
         plt.ylabel('Amplitude')
@@ -81,19 +81,23 @@ def create_envelope_spectrum(
         else:
             yf_amplitude[1:] *= 2
 
-        # --- Generate and save the visual output ---
-        plt.figure(figsize=(10, 8))
-        plt.plot(xf_positive, yf_amplitude)
-        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-        plt.title('Envelope Spectrum')
-        plt.xlabel('Modulating Frequency [Hz]')
-        plt.ylabel('Amplitude')
-        # Envelope spectra are typically viewed at lower frequencies
-        # We can set a sensible default x-limit or make it a parameter later
-        plt.xlim([0, min(300, sampling_rate / 2)])
-        plt.tight_layout()
-        plt.savefig(output_image_path)
-        plt.close()
+        if not os.path.isfile(output_image_path):
+            # --- Generate and save the visual output ---
+            fig, ax = plt.subplots(1,1,figsize=(7, 6))
+            ax.plot(xf_positive, yf_amplitude)
+            ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+            ax.set_title('Envelope Spectrum')
+            ax.set_xlabel('Modulating Frequency [Hz]')
+            ax.set_ylabel('Amplitude')
+            # Envelope spectra are typically viewed at lower frequencies
+            # We can set a sensible default x-limit or make it a parameter later
+            ax.set_xlim([0, min(300, sampling_rate / 2)])
+            plt.tight_layout()
+            plt.savefig(output_image_path)
+            fig_path = os.path.join(f"{output_image_path[:-2]}kl")
+            with open(fig_path, 'wb') as f:
+                pickle.dump(fig, f)
+            plt.close()
 
         # --- Return the structured data output ---
         results = {
@@ -116,19 +120,23 @@ def create_envelope_spectrum(
 
         yf_amplitude = np.sum(signal_data, axis=0)
 
-        # --- Generate and save the visual output ---
-        plt.figure(figsize=(10, 8))
-        plt.plot(xf_positive, yf_amplitude)
-        plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-        plt.title('Enhanced Envelope Spectrum')
-        plt.xlabel('Modulating Frequency [Hz]')
-        plt.ylabel('Amplitude')
-        # Envelope spectra are typically viewed at lower frequencies
-        # We can set a sensible default x-limit or make it a parameter later
-        # plt.xlim([0, min(300, sampling_rate / 2)])
-        plt.tight_layout()
-        plt.savefig(output_image_path)
-        plt.close()
+        if not os.path.isfile(output_image_path):
+            # --- Generate and save the visual output ---
+            fig, ax = plt.subplots(1,1,figsize=(7, 6))
+            ax.plot(xf_positive, yf_amplitude)
+            ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+            ax.set_title('Enhanced Envelope Spectrum')
+            ax.set_xlabel('Modulating Frequency [Hz]')
+            ax.set_ylabel('Amplitude')
+            # Envelope spectra are typically viewed at lower frequencies
+            # We can set a sensible default x-limit or make it a parameter later
+            # ax.xlim([0, min(300, sampling_rate / 2)])
+            plt.tight_layout()
+            plt.savefig(output_image_path)
+            fig_path = os.path.join(f"{output_image_path[:-2]}kl")
+            with open(fig_path, 'wb') as f:
+                pickle.dump(fig, f)
+            plt.close()
 
         results = {
             'frequencies': xf_positive,

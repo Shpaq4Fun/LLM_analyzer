@@ -1,27 +1,22 @@
 import numpy as np
 from scipy.fft import fft, fftfreq
 import matplotlib.pyplot as plt
-
+import os, pickle
 def create_fft_spectrum(
     data: dict,
     output_image_path: str
 ) -> dict:
     """
-    Calculates and saves the Fast Fourier Transform (FFT) spectrum for a signal.
+    Compute and save a one-sided FFT amplitude spectrum.
 
-    This function provides a one-sided amplitude spectrum suitable for real-valued
-    input signals, plotting the result up to the Nyquist frequency.
-
-    Args:
-        data (dict): dictionary with data from previous step, with keys 
-            'signal_data', 'sampling_rate' and 'output_image_path'.
-        output_image_path (str): The full path where the output PNG image will be saved.
+    Parameters (in `data` dict expected keys):
+    - primary_data: str, name of the array key holding the input signal
+    - sampling_rate: int, sampling frequency in Hz
 
     Returns:
-        dict: A dictionary containing the results, with the following keys:
-              'frequencies' (np.ndarray): Array of frequency bins in Hz.
-              'amplitudes' (np.ndarray): Array of corresponding amplitudes.
-              'image_path' (str): The path where the output image was saved.
+    - dict with keys:
+        frequencies, amplitudes, domain ('frequency-spectrum'), primary_data,
+        secondary_data, image_path
     """
     # --- Internal logic using scipy.fft ---
     primary_data = data.get('primary_data')
@@ -72,17 +67,23 @@ def create_fft_spectrum(
     else: # Odd number of samples
         yf_amplitude[1:] = yf_amplitude[1:] * 2
 
-    # --- Generate and save the visual output ---
-    plt.figure(figsize=(10, 8))
-    plt.plot(xf_positive, yf_amplitude)
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-    plt.title('FFT Spectrum')
-    plt.xlabel('Frequency [Hz]')
-    plt.ylabel('Amplitude')
-    plt.xlim([0, min(300,sampling_rate / 2)]) # Explicitly set x-axis to Nyquist
-    plt.tight_layout()
-    plt.savefig(output_image_path)
-    plt.close()
+    if not os.path.isfile(output_image_path):
+        # --- Generate and save the visual output ---
+        fig, ax = plt.subplots(1,1,figsize=(7, 6))
+        ax.plot(xf_positive, yf_amplitude)
+        ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+        ax.set_title('FFT Spectrum')
+        ax.set_xlabel('Frequency [Hz]')
+        ax.set_ylabel('Amplitude')
+        # Envelope spectra are typically viewed at lower frequencies
+        # We can set a sensible default x-limit or make it a parameter later
+        # ax.xlim([0, min(300, sampling_rate / 2)])
+        plt.tight_layout()
+        plt.savefig(output_image_path)
+        fig_path = os.path.join(f"{output_image_path[:-2]}kl")
+        with open(fig_path, 'wb') as f:
+            pickle.dump(fig, f)
+        plt.close()
 
     # --- Return the structured data output ---
     results = {

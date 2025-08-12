@@ -1,9 +1,9 @@
 import numpy as np
 from scipy.signal import butter, filtfilt
 import matplotlib.pyplot as plt
-import matplotlib
+import matplotlib, pickle
 matplotlib.use('TkAgg')
-
+import os
 def bandpass_filter(
     data: dict,
     output_image_path: str,
@@ -12,19 +12,22 @@ def bandpass_filter(
     order: int = 4
 ) -> dict:
     """
-    Applies a zero-phase band-pass Butterworth filter to a signal.
+    Apply a zero-phase band-pass Butterworth filter to a signal.
 
-    Args:
-        signal_data (np.ndarray): 1D NumPy array containing the time-series signal.
-        sampling_rate (int): The sampling frequency of the signal in Hz.
-        lowcut_freq (float): The lower cutoff frequency for the filter in Hz.
-        highcut_freq (float): The upper cutoff frequency for the filter in Hz.
-        order (int, optional): The order of the Butterworth filter. A higher order
-                               provides a steeper cutoff. Defaults to 4.
+    Parameters (in `data` dict expected keys):
+    - primary_data: str, name of the array key holding the input signal
+    - sampling_rate: int, sampling frequency in Hz
+    - image_path: str, optional precomputed plot path (not used here)
+
+    Other parameters:
+    - lowcut_freq: lower cutoff frequency [Hz]
+    - highcut_freq: upper cutoff frequency [Hz]
+    - order: integer order of the Butterworth filter
 
     Returns:
-        dict: The band-pass filtered 1D signal. Returns the original signal
-                    if the frequency range is invalid.
+    - dict with keys:
+        filtered_signal (np.ndarray), domain ('time-series'), primary_data,
+        sampling_rate, image_path
     """
     primary_data = data.get('primary_data')
     if primary_data is None:
@@ -45,6 +48,7 @@ def bandpass_filter(
     # --- Input Validation ---
     if lowcut_freq >= highcut_freq:
         print(f"Warning: Lowcut frequency ({lowcut_freq} Hz) is greater than or equal to highcut frequency ({highcut_freq} Hz). Returning original signal.")
+        lowcut_freq, highcut_freq = highcut_freq, lowcut_freq
         return signal_data
     if highcut_freq >= nyquist_freq:
         print(f"Warning: Highcut frequency ({highcut_freq} Hz) is greater than or equal to the Nyquist frequency ({nyquist_freq} Hz). Clipping highcut to Nyquist region.")
@@ -65,19 +69,22 @@ def bandpass_filter(
     filtered_signal = filtfilt(b, a, signal_data)
 
     time_axis = np.arange(len(signal_data)) / sampling_rate
-
-    # --- Generate and save the visual output ---
-    plt.figure(figsize=(10, 8))
-    plt.plot(time_axis, filtered_signal, color="#001A52", linewidth=0.5)
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-    plt.title('Signal after bandpass filtration of order {} in range [{}, {}] Hz'.format(order,lowcut_freq, highcut_freq))
-    plt.xlim(0, time_axis[-1])
-    plt.axis('tight')
-    plt.xlabel('Time (s)')
-    plt.ylabel('Amplitude')
-    plt.tight_layout()
-    plt.savefig(output_image_path)
-    plt.close()
+    if not os.path.isfile(output_image_path):
+        # --- Generate and save the visual output ---
+        fig, ax = plt.subplots(1,1,figsize=(7, 6))
+        ax.plot(time_axis, filtered_signal, color="#001A52", linewidth=0.5)
+        ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+        ax.set_title('Signal after bandpass filtration of order {} in range [{}, {}] Hz'.format(order,lowcut_freq, highcut_freq))
+        ax.set_xlim(0, time_axis[-1])
+        ax.axis('tight')
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Amplitude')
+        plt.tight_layout()
+        plt.savefig(output_image_path)
+        fig_path = os.path.join(f"{output_image_path[:-2]}kl")
+        with open(fig_path, 'wb') as f:
+            pickle.dump(fig, f)
+        plt.close()
 
 
     results = {

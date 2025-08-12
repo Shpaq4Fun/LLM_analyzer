@@ -9,13 +9,16 @@ Return a JSON object where you provide:
 3. "is_final": Binary value 0/1, where 1 means that the last step reveale the results in clear enough way to interpret the component of interest, and the fault itself. If you select the value 0, then the analysis will be continued.
 4. "params": Provide a new set of parameters for the tool. If you have an idea how you want to set the specific parameters other than their default values (i.e. specific cutoff frequencies for a filter), provide them in their respective JSON fields. You can find the list of parameters in the documentation of the current action provided below. Use the actual names of the individual parameters of the tool as field names inside "params" instead of "param_1", "param_2" etc.
 5. "input_variable": Provide a name of the input variable for the proposed action, as the value of "output_variable" of the relevant step in the pipeline, not necessarily the last one. You can find the names of output variables for each step in the listing of the previous actions provided below. For example, in the sequence "load_data" -> "calculate_signal_spectrogram" -> "bandpass_filter" -> "create_envelope_spectrum", the input to the envelope spectrum should be the output of filtration step, not the output of the data loading step. 
+6. "justification": Provide a short justification (1-2 sentences) of your decision for your input variable selection as a string.
 
 IMPORTANT: you can select "input_variable" only from results that have appropriate domain. For example:
 - spectrogram can be calculated from "domain": "time-series", but not from "domain": "frequency-spectrum"; 
 - envelope spectrum can be calculated from "domain": "time-series" or "bi-frequency-matrix" (in this case Enhanced Envelope Spectrum is calculated from the csc_map), but not from "domain": "frequency-spectrum";
 - filters can be applied to "domain": "time-series", but not from "domain": "frequency-spectrum"; 
 
-Here you have the mapping of feasible domains of results to be selected as inputs for each tool as "tool: domain", so that you can select the appropriate input for the proposed tool:
+Here you have the mapping of feasible domains of results to be selected as inputs for each tool as "tool: domain", so that you can select the appropriate input for the proposed tool. You absolutely MUST follow the domain map, or the system will throw an error.
+
+DOMAIN MAP:
 
 - create_fft_spectrum: time-series;
 - create_envelope_spectrum: time-series or bi-frequency-matrix;
@@ -36,6 +39,7 @@ The JSON object should be formatted according to the template:
   "evaluation_summary": "string",
   "tool_name": "string",
   "input_variable": "string",
+  "justification": "string",
   "is_final": "integer",
   "params": {{
     "param_1": "integer",

@@ -1,3 +1,12 @@
+"""
+RAGBuilder constructs and loads Chroma vector stores over a knowledge base.
+
+- Loads .md, .py and .pdf documents from given directories
+- Splits them into chunks and embeds using sentence-transformers via LangChain
+- Persists the ChromaDB index for later retrieval
+- Provides progress logs via a queue back to the GUI
+"""
+
 # src/core/rag_builder.py
 
 import os
@@ -15,7 +24,7 @@ class RAGBuilder:
         """Helper to put a log message in the queue."""
         queue.put(("log", {"sender": "RAGBuilder", "message": message}))
 
-    def build_index(self, knowledge_base_paths, queue, persist_directory, embedding_model="all-MiniLM-L6-v2"):
+    def build_index(self, knowledge_base_paths, queue, persist_directory, embedding_model="all-MiniLM-L12-v2"):
         """
         Builds the RAG index from the specified knowledge base paths.
         Accepts a list of paths to index.
@@ -29,7 +38,6 @@ class RAGBuilder:
 
                 # 1. Load Documents
                 self._log(queue, "Loading documents...")
-                from langchain_community.document_loaders import TextLoader
                 loader = DirectoryLoader(knowledge_base_path, glob="**/*.md", loader_cls=TextLoader, show_progress=False)
                 documents = loader.load()
                 loader1 = DirectoryLoader(knowledge_base_path, glob="**/*.py", loader_cls=TextLoader, show_progress=False)

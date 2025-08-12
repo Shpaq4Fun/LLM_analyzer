@@ -1,7 +1,7 @@
 import numpy as np
-import scipy.signal
+import scipy.signal, os
 import matplotlib.pyplot as plt
-
+import pickle
 def create_signal_spectrogram(
     data: dict,
     output_image_path: str,
@@ -9,27 +9,24 @@ def create_signal_spectrogram(
     noverlap: int = 800
 ) -> dict:
     """
-    Calculates and saves a spectrogram for a time-series signal.
+    Calculate and save a spectrogram for a time-series signal.
 
-    This function acts as a wrapper around scipy.signal.spectrogram, providing
-    both a visual output (a saved image file) and a structured data output
-    (a dictionary containing the raw spectrogram data).
+    Wrapper around scipy.signal.spectrogram producing both an image and
+    a structured dictionary suitable for downstream tools.
 
-    Args:
-        data (dict): dictionary with data from previous step, with keys 
-            'signal_data', 'sampling_rate' and 'output_image_path'.
-        output_image_path (str): The full path where the output PNG image will be saved.
-        window (int, optional): Length of each segment for the STFT. Defaults to 1024.
-                                 A larger value gives better frequency resolution.
-        noverlap (int, optional): Number of points to overlap between segments. 
-                                  Must be less than window. Defaults to 800.
+    Parameters (in `data` dict expected keys):
+    - primary_data: str, name of the array key holding the input signal
+    - sampling_rate: int, sampling frequency in Hz
+
+    Other parameters:
+    - window: STFT segment length
+    - noverlap: overlap between segments (< window)
 
     Returns:
-        dict: A dictionary containing the results, with the following keys:
-              'frequencies' (np.ndarray): Array of sample frequencies.
-              'times' (np.ndarray): Array of segment times.
-              'Sxx_db' (np.ndarray): 2D array of the spectrogram power in dB.
-              'image_path' (str): The path where the output image was saved.
+    - dict with keys:
+        frequencies, times, Sxx_db (magnitude), domain ('time-frequency-matrix'),
+        primary_data, secondary_data, tertiary_data, sampling_rate, nperseg,
+        noverlap, original_phase, original_signal_data, image_path
     """
     primary_data = data.get('primary_data')
     if primary_data is None:
@@ -43,6 +40,10 @@ def create_signal_spectrogram(
     if sampling_rate is None:
         print("Warning: No sampling rate provided for create_signal_spectrogram tool.")
     
+    if type(window) is str:
+        window = int(1024)
+    if type(noverlap) is str:
+        noverlap = int(800)
     # Ensure noverlap is less than window, which is a requirement for scipy
     if noverlap >= window:
         # Use a sensible default overlap if the input is invalid
@@ -54,23 +55,28 @@ def create_signal_spectrogram(
         fs=sampling_rate,
         window='hann',
         nperseg=window,
-        noverlap=noverlap
+        noverlap=noverlap,
+        nfft=2*window
     )
     phase = np.angle(Sxx)
     # Convert power to decibels for better visualization
     # Add a small epsilon to avoid log(0) errors
     Sxx_db = 10 * np.log10(np.abs(Sxx) + 1e-9)
 
-    # --- Generate and save the visual output ---
-    plt.figure(figsize=(10, 8))
-    plt.pcolormesh(times, frequencies/1000, Sxx_db, shading='gouraud', cmap='jet')
-    plt.ylabel('Frequency [kHz]')
-    plt.xlabel('Time [sec]')
-    plt.title('Spectrogram')
-    plt.colorbar(label='Power/Frequency (dB/Hz)')
-    plt.tight_layout()
-    plt.savefig(output_image_path)
-    plt.close()  # Close the figure to free up memory
+    if not os.path.isfile(output_image_path):
+        # --- Generate and save the visual output ---
+        fig, ax = plt.subplots(1,1,figsize=(7, 6))
+        im = ax.pcolormesh(times, frequencies/1000, Sxx_db, shading='nearest', cmap='jet')
+        ax.set_ylabel('Frequency [kHz]')
+        ax.set_xlabel('Time [sec]')
+        ax.set_title('Spectrogram')
+        fig.colorbar(im, ax=ax, label='Power/Frequency (dB/Hz)')
+        fig.tight_layout()
+        plt.savefig(output_image_path)
+        fig_path = os.path.join(f"{output_image_path[:-2]}kl")
+        with open(fig_path, 'wb') as f:
+            pickle.dump(fig, f)
+        plt.close()  # Close the figure to free up memory
 
     # --- Return the structured data output ---
     results = {

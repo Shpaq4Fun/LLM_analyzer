@@ -1,25 +1,26 @@
+"""
+Authentication and credentials helper for Google Generative AI.
+
+- Sets environment variables so the Google SDK can locate service account credentials
+- Performs a lightweight model instantiation to validate that credentials are usable
+- Returns True on success, False otherwise
+
+Note: The JSON key path is currently hardcoded for local development. Replace it with your own path.
+"""
+
 import os
 import google.generativeai as genai
 # from google import genai
-# Ustaw zmienną środowiskową, aby wskazywała na Twój plik z kluczem JSON
-# Zastąp ścieżkę swoją własną ścieżką do pliku
+# Set the environment variable to point to your JSON key file
+# Replace the path with your own local path
 def get_credentials():
-    # export GOOGLE_CLOUD_PROJECT="llm-analyzer-466009"
-    # export GOOGLE_CLOUD_LOCATION=us-central1
-    # export GOOGLE_GENAI_USE_VERTEXAI=True
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = "D:\\Drive\\Projekty\\LLM_analyzer\\src\\core\\llm-analyzer-466009-81c353112c07.json"
-    # os.environ["GOOGLE_API_KEY"] = "MIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDby1kfXuH9Kuqz\nVCXZCNL2hfO8jzSiIT8u58w1u98YhlEsHeAWJSPHm/loGHD9P/fNoti55Ehae1ex\nrEAdFtpBUGd+uJcRKJkWS8om0ZvtmrB2K1R7cSMID5bxJsvmsQJdwzrJsxf+ZyRz\nhd+pzc/S10qmT6n5p3vOdvolssgnKdFbpESRImsV5liaC+fETar5u4pCtqBrNR9F\np2rDkv5nJ73uIsI28IsE/ql/93A2vNn3XBW2CIfZLDpntAn2oW2Yi++5Hai0YIIe\nvi10xY5NbB9X3QA7GoAk1z7f9Ecf1KGnZ/Z8dtwLSBjmisN5dUhi0RdFPUr4O5ZV\nr5q9XdCPAgMBAAECggEAN6ukSblXJTAzHTPhmDzPbmiUSTy+eJhSMBe/FhcdVVFk\nCvgQM5u5mcvsWoziRYrnwZqPKVpkZyKZniOCY7vPkT6D0EmB3fM5/zc4Hyf1RjPp\noSyta8zGsjp8oV0RxT8tWcFiyQbHO4U1attMQO6jxoQIYOKJq3Xb+noRNu43Gw/Y\n0J9mereDY3FoGKmJjcbBw/9yKdzjh1CcTcmMNt7vtzVHWYALe3hdU/iGVqtt6K5E\nPu/987fZ83RgziIwLjyH1vtwp67wZ3+5kuPHtOZP6npRX7AD907SGsAyTLsa5Tor\nLP7I09H9E1v7iB8lY2e6/DEWP1uTNoGP4CWe64ldrQKBgQDuNDEc4J7PmAMpLkSH\n6rrEy/D6+U/j+OROOoTHtWGZvVFC3uQFzOqggM9vWONuwFYroOak1eIaUTUAgXJq\nDIRPTcA9R3loNd8d25yXsGTeBBLegKcpjtsw6+dhudxZ2BY6hrLxIOWiQ/kAh3vQ\nyenD34ekXmPasPz/P1FqjYVRNQKBgQDsNw+6EyOMhHvLZktOvezBcnSCY5hT5YpH\nFhJntF1Cm+1X2LLTlfCm7HDEO1yil2jVYisPxEsDqTnqTjeYbZ91HGjFAKhQdvo5\nG/oCoxLBcG63KsLy6dyxoUtFKiSr3LCd74DbtWOEG6LqkOB9FVRQ06Kc6ZzYB5Hl\nDv0M/7N3MwKBgQDADRZ36OZCC5ao0iPwzaDt4FwXjYELFfXE2MuLVMMvOANXfeus\nfY3CAHi+lpUwCySuolizF7rnawfns3Zy6EqYweA3x/OrwJt2MEUty8tXcUNhX6rn\nB8XTyK9SDI8LZPxvDYEihlp+nH0bHyEFsnWmNgffzzaE8OPaS8uxtA6D7QKBgQCa\nFIyIpsVQena5xZ8n3NFbmgoPp2GMkDTzi50z0j3nHgjifXKge7S/XYltJv+U+0ih\nr+hA35zC5ZbmlGDFZ/RUktRwdK5V1lX//JTHNZIdZfaCOj1x8ERKBdkwY34KMOlw\nC/M03Yvtd418jkYwsUIPew0eZ3Aspjtve6hq2zw4awKBgQDc4hjFaFvnHKO195K1\n1OG7ZDMrNvj6hhZJlPG0BCKtXPXqJycRXkKlhu1/TxqYtESUzvm+Th8hFJZUW8HC\nc57WKL9actgHlj4P4SN+2Gk3Qsr2XkYJCIXQLS49WMYzwdD8JzP2PNT5V0nFJTvC\n9FLmUXbUx1LmgBC0Nt9g/dRZSw=="
-    # os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "False"
-    # os.environ["GOOGLE_CLOUD_PROJECT"] = "llm-analyzer-466009"
-    # os.environ["GOOGLE_CLOUD_LOCATION"] = "us-central1"
 
-    # Teraz możesz normalnie korzystać z biblioteki.
-    # Nie potrzebujesz już genai.configure(api_key=...).
-    # Biblioteka automatycznie znajdzie i użyje Twojego pliku z kluczem.
+    # You can now normally use the library.
+    # You no longer need to call genai.configure(api_key=...).
+    # The library will automatically find and use your key file.
     try:
         model = genai.GenerativeModel('gemini-2.0-flash')
-        # model_name = "gemini-2.0-flash-001" # Specific model version
-        # genai_client = genai.Client()
         return True
     except Exception as e:
         print(f"An error occurred: {e}")

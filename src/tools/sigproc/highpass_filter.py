@@ -3,7 +3,7 @@ from scipy.signal import butter, filtfilt
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use('TkAgg')
-
+import os, pickle
 def highpass_filter(
     data: dict,
     output_image_path: str,
@@ -11,19 +11,20 @@ def highpass_filter(
     order: int = 4
 ) -> dict:
     """
-    Applies a zero-phase high-pass Butterworth filter to a signal.
+    Apply a zero-phase high-pass Butterworth filter to a signal.
 
-    Args:
-        signal_data (np.ndarray): 1D NumPy array containing the time-series signal.
-        sampling_rate (int): The sampling frequency of the signal in Hz.
-        cutoff_freq (float): The cutoff frequency for the filter in Hz. Frequencies
-                             below this value will be attenuated.
-        order (int, optional): The order of the Butterworth filter. A higher order
-                               provides a steeper cutoff. Defaults to 4.
+    Parameters (in `data` dict expected keys):
+    - primary_data: str, name of the array key holding the input signal
+    - sampling_rate: int, sampling frequency in Hz
+
+    Other parameters:
+    - cutoff_freq: cutoff frequency [Hz]
+    - order: integer order of the Butterworth filter
 
     Returns:
-        np.ndarray: The high-pass filtered 1D signal. Returns the original signal
-                    if the cutoff frequency is invalid.
+    - dict with keys:
+        filtered_signal (np.ndarray), domain ('time-series'), primary_data,
+        sampling_rate, image_path
     """
     primary_data = data.get('primary_data')
     if primary_data is None:
@@ -59,18 +60,22 @@ def highpass_filter(
     filtered_signal = filtfilt(b, a, signal_data)
     time_axis = np.arange(len(signal_data)) / sampling_rate
 
-    # --- Generate and save the visual output ---
-    plt.figure(figsize=(10, 8))
-    plt.plot(time_axis, filtered_signal, color="#001A52", linewidth=0.5)
-    plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-    plt.title('Signal after highpass filtration with order {} and cutoff frequency: {} Hz'.format(order, cutoff_freq))
-    plt.xlim(0, time_axis[-1])
-    plt.axis('tight')
-    plt.xlabel('Time (s)')
-    plt.ylabel('Amplitude')
-    plt.tight_layout()
-    plt.savefig(output_image_path)
-    plt.close()
+    if not os.path.isfile(output_image_path):
+        # --- Generate and save the visual output ---
+        fig, ax = plt.subplots(1,1,figsize=(7, 6))
+        ax.plot(time_axis, filtered_signal, color="#001A52", linewidth=0.5)
+        ax.grid(True, which='both', linestyle='--', linewidth=0.5)
+        ax.set_title('Signal after highpass filtration of order {} at {} Hz'.format(order,cutoff_freq))
+        ax.set_xlim(0, time_axis[-1])
+        ax.axis('tight')
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Amplitude')
+        plt.tight_layout()
+        plt.savefig(output_image_path)
+        fig_path = os.path.join(f"{output_image_path[:-2]}kl")
+        with open(fig_path, 'wb') as f:
+            pickle.dump(fig, f)
+        plt.close()
 
 
     results = {

@@ -1,9 +1,17 @@
-# --- Main Orchestrator Class ---
+"""
+LLMOrchestrator: Coordinates the end-to-end autonomous analysis pipeline.
+
+Responsibilities:
+- Builds prompts and communicates with the LLM
+- Manages a sequence of tool-based actions (pipeline)
+- Executes pipeline steps as a generated script in a subprocess
+- Evaluates results and iteratively proposes next actions
+- Interfaces with a GUI via a log_queue for messages and images
+"""
+
 import google.generativeai as genai
-from google.generativeai import types
 from difflib import SequenceMatcher
 import os, re
-# import numpy as np
 import pickle
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
@@ -15,7 +23,7 @@ class LLMOrchestrator:
         # 1. Initialize core components
         self.log_queue = log_queue
         self.prompt_assembler = PromptAssembler()
-        self.model_name = "gemini-2.0-flash" # Specific model version
+        self.model_name = "gemini-2.5-pro" # Specific model version
         self.model = genai.GenerativeModel(self.model_name)
 
         # Load the pre-built vector store from disk
@@ -49,7 +57,7 @@ class LLMOrchestrator:
         self.pipeline_steps = []   # This is our "script" as a list of Action objects
         self.result_history = []
         self.eval_history = []
-        self.max_iterations = 10   # A safety break to prevent infinite loops
+        self.max_iterations = 20   # A safety break to prevent infinite loops
 
     # --- Main Public Method ---
 
@@ -149,10 +157,10 @@ class LLMOrchestrator:
             # return 0
             # 4. Check for termination condition
             if json.loads(evaluation).get("is_final"):
-                self.log_queue.put(("log", {"sender": "System", "message": f"--- ANALYSIS COMPLETE ---\n"}))
+                self.log_queue.put(("log", {"sender": "System", "message": f"--- ANALYSIS COMPLETE ---"}))
                 www = "\n\n".join(self.eval_history)
                 self.log_queue.put(("log", {"sender": "System", "message": f"--- REASONING HISTORY ---\n\n {www}\n ---\n"}))
-                self.log_queue.put(("log", {"sender": "System", "message": f"--- THANK YOU FOR FLYING BIEDRONKA AIRLINES ---\n"}))
+                # self.log_queue.put(("log", {"sender": "System", "message": f"--- THANK YOU FOR FLYING BIEDRONKA AIRLINES ---\n"}))
                 break
         
         # # === FINAL OUTPUT ===
@@ -190,7 +198,34 @@ class LLMOrchestrator:
             # credentials = get_credentials()
             # genai.configure(credentials=credentials)
             
-            response = self.model.generate_content(prompt)
+            try:
+                # self.model = genai.GenerativeModel(self.model_name)
+                response = self.model.generate_content(prompt)
+            except:
+                try:
+                    self.model_name = "gemini-2.5-flash"
+                    self.model = genai.GenerativeModel("gemini-2.5-flash")
+                    response = self.model.generate_content(prompt)
+                except:
+                    try:
+                        self.model_name = "gemini-2.0-pro"
+                        self.model = genai.GenerativeModel("gemini-2.0-pro")
+                        response = self.model.generate_content(prompt)
+                    except:
+                        try:
+                            self.model_name = "gemini-2.0-flash"
+                            self.model = genai.GenerativeModel("gemini-2.0-flash")
+                            response = self.model.generate_content(prompt)
+                        except:
+                            try:
+                                self.model_name = "gemini-1.5-pro"
+                                self.model = genai.GenerativeModel("gemini-1.5-pro")
+                                response = self.model.generate_content(prompt)
+                            except:
+                                self.model_name = "gemini-1.5-flash"
+                                self.model = genai.GenerativeModel("gemini-1.5-flash")
+                                response = self.model.generate_content(prompt)
+            self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"--- ACTIVE MODEL: {self.model_name} ---"}))
             # response = self.genai_client.models.generate_content(prompt)
             # aaa = json.dumps(response_text, indent=6)
             # Clean up the response text
@@ -237,7 +272,7 @@ class LLMOrchestrator:
                     "tool_name": "create_envelope_spectrum", # Placeholder for actual LLM proposal
                     "params": {
                         "input_signal": input_variable, # Use the output of the load_data action
-                        "image_path": os.path.join(self.state_dir, f"step_{len(self.pipeline_steps)}_fft_spectrum.png")
+                        "image_path": os.path.join(self.state_dir, f"step_{len(self.pipeline_steps)}_env_spectrum.png")
                     },
                     "output_variable": f"envelope_spectrum_{len(self.pipeline_steps)}"
                 }
@@ -271,7 +306,7 @@ class LLMOrchestrator:
                         "input_signal": input_variable, # Use the output of the load_data action
                         "image_path": os.path.join(self.state_dir, f"step_{len(self.pipeline_steps)}_csc.png"),
                         "min_alpha": 1,
-                        "max_alpha": 200,
+                        "max_alpha": 150,
                         "window": 512,
                         "noverlap": 450
                     },
@@ -357,11 +392,18 @@ class LLMOrchestrator:
                         "input_signal": input_variable, # Use the output of the load_data action
                         "image_path": os.path.join(self.state_dir, f"step_{len(self.pipeline_steps)}_decompose_matrix_nmf.png"),
                         "n_components": 3,
-                        "max_iter": 200,
+                        "max_iter": 150,
                         "tolerance": 1e-4
                     },
                     "output_variable": f"nmf_results_{len(self.pipeline_steps)}"
                 }
+                for key in param_keys:
+                    for key_orig in action['params'].keys():
+                        ratio = SequenceMatcher(None, key, key_orig).ratio()
+                        print(f"Comparing {key} with {key_orig}: ratio {ratio}")
+                        if ratio > accept_ratio:
+                            print(f"Replacing {key_orig} with the value from {key} ")
+                            action['params'][key_orig] = params[key]
                 return action
             case "select_component":
                 action = {
@@ -372,8 +414,15 @@ class LLMOrchestrator:
                         "image_path": os.path.join(self.state_dir, f"step_{len(self.pipeline_steps)}_selected_component.png"),
                         "component_index": 0
                     },
-                    "output_variable": f"selected_nmf_component_{len(self.pipeline_steps)}"
+                    "output_variable": f"selected_component_{len(self.pipeline_steps)}"
                 }
+                for key in param_keys:
+                    for key_orig in action['params'].keys():
+                        ratio = SequenceMatcher(None, key, key_orig).ratio()
+                        print(f"Comparing {key} with {key_orig}: ratio {ratio}")
+                        if ratio > accept_ratio:
+                            print(f"Replacing {key_orig} with the value from {key} ")
+                            action['params'][key_orig] = params[key]
                 return action
 
     def _execute_current_pipeline(self):
@@ -489,8 +538,35 @@ class LLMOrchestrator:
         try:
             # credentials = get_credentials()
             # genai.configure(credentials=credentials)
-            
-            response = self.model.generate_content(prompt)
+            try:
+                # self.model = genai.GenerativeModel(self.model_name)
+                response = self.model.generate_content(prompt)
+            except:
+                try:
+                    self.model_name = "gemini-2.5-flash"
+                    self.model = genai.GenerativeModel("gemini-2.5-flash")
+                    response = self.model.generate_content(prompt)
+                except:
+                    try:
+                        self.model_name = "gemini-2.0-pro"
+                        self.model = genai.GenerativeModel("gemini-2.0-pro")
+                        response = self.model.generate_content(prompt)
+                    except:
+                        try:
+                            self.model_name = "gemini-2.0-flash"
+                            self.model = genai.GenerativeModel("gemini-2.0-flash")
+                            response = self.model.generate_content(prompt)
+                        except:
+                            try:
+                                self.model_name = "gemini-1.5-pro"
+                                self.model = genai.GenerativeModel("gemini-1.5-pro")
+                                response = self.model.generate_content(prompt)
+                            except:
+                                self.model_name = "gemini-1.5-flash"
+                                self.model = genai.GenerativeModel("gemini-1.5-flash")
+                                response = self.model.generate_content(prompt)
+            self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"--- ACTIVE MODEL: {self.model_name} ---"}))
+
             # response = self.genai_client.models.generate_content(prompt)
             # aaa = json.dumps(response_text, indent=6)
             # Clean up the response text
@@ -502,6 +578,7 @@ class LLMOrchestrator:
             input_variable = json.loads(evaluation).get('input_variable')
             params = json.loads(evaluation).get("params")
             is_final = json.loads(evaluation).get("is_final")
+            justification = json.loads(evaluation).get("justification")
             print(json.dumps(text_description, indent=4))
             print(proposed_action)
             # print(input_variable)
@@ -509,99 +586,14 @@ class LLMOrchestrator:
             # print(params.keys())
             self.eval_history.append(text_description)
         
-            self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"--- RESULT EVALUATION RESPONSE ---\n Evaluation summary: {text_description} \n\n Proposed action: {json.dumps(proposed_action, indent=4)} \n\n Input variable: {input_variable} \n\n Custom parameters: {params} \n\n Action final: {is_final}\n--------------------------"}))
+            self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"--- RESULT EVALUATION RESPONSE ---\n Evaluation summary: {text_description} \n Proposed action: {json.dumps(proposed_action, indent=4)} \n Input variable: {input_variable} \n Justification: {justification} \n Custom parameters: {params} \n Action final: {is_final}\n--------------------------"}))
 
         except Exception as e:
             print(f"Error calling Gemini API: {e}")
             evaluation = {"status": "error", "message": str(e)}
         return evaluation
 
-
-    def extract_text_and_json(self, response_string):
-        """
-        Extracts the text description and a JSON object from a Gemini API response string.
-
-        Args:
-            response_string (str): The raw string response from the Gemini API,
-                                containing text followed by a JSON object.
-
-        Returns:
-            tuple: A tuple containing two elements:
-                - str: The text description part.
-                - dict or None: The parsed JSON object as a dictionary, or None if
-                                no valid JSON object is found.
-        """
-        # 1. Try to find the start of a JSON object using regex
-        # We use a non-greedy match (.*?) to find the first '{'
-        # and then capture everything until the last '}'
-        # re.DOTALL makes '.' match newlines as well
-        match = re.search(r'(.*?)\s*{[^{}]*(?:{[^{}]*}[^{}]*)*}(?:[^{}]*)$', response_string, re.DOTALL)
-
-        if match:
-            text_part = match.group(1).strip() # Get the text before the JSON, strip whitespace
-            json_string_raw = match.group(0)[len(text_part):].strip() # Get the full JSON part including curly braces
-
-            # Clean up common issues from LLM-generated JSON (e.g., unicode non-breaking space)
-            # The example has a non-breaking space (U+00A0) which needs to be replaced
-            json_string_clean = json_string_raw.replace('\u00A0', ' ').strip()
-            if text_part == '':
-                text_part = "Only JSON was found in the response."
-            try:
-                # Attempt to parse the cleaned JSON string
-                json_object = json.loads(json_string_clean)
-                return text_part, json_object
-            except json.JSONDecodeError as e:
-                print(f"Warning: Failed to decode JSON part: {e}")
-                print(f"Problematic JSON string: '{json_string_clean}'")
-                return response_string.strip(), None # Return original string if JSON fails
-        else:
-            # If no JSON object is found, return the whole string as text
-            return response_string.strip(), None
-    def _attempt_refinement(self, last_action, evaluation):
-        """Asks the LLM if the failed action can be fixed by tuning parameters.
-        podać jsona ostatniej akcji, doca toola, poprzedni rezultat i obecny rezultat, niech zmieni parametry w jsonie
-        """
-        # This method would prompt the LLM to suggest new parameters for the failed action.
-        # If it suggests new parameters, it modifies the last item in self.pipeline_steps.
-        # Returns True if refinement was successful, False otherwise.
-        # context_bundle = {
-        #     "metaknowledge": self.metaknowledge,
-        #     "last_action": last_action,
-        #     "quantitative_results": self.parameterization_module.calculate_metrics(result),
-        #     "rag_context_for_evaluation": self.rag_retriever.get_relevant_documents("interpret " + last_action['tool_name']),
-        #     "rag_context_for_evaluation_tools": self.rag_retriever_tools.get_relevant_documents("interpret " + action_taken['tool_name'])
-        # }
-        # final_prompt = self.prompt_assembler.build_prompt(
-        #     prompt_type="ATTEMPT_REFINEMENT",
-        #     context_bundle=context_bundle
-        # )
-        # response_json = self.api_client.call_multimodal(final_prompt, image=result.get('image_data'))
-        # return parse_json(response_json)
-        current_action = self._fetch_next_action(evaluation)
-
-        print("Attempt refinement not yet implemented")
-        return False
-
-    def _is_analysis_complete(self, last_result, last_action):
-        """Asks the LLM if the main objective has been met."""
-        # This method uses a prompt to ask for a final yes/no decision.
-        # Returns True or False.
-        # context_bundle = {
-        #     "metaknowledge": self.metaknowledge,
-        #     "pipeline_steps": self.pipeline_steps,
-        #     "last_result": last_result,
-        #     "quantitative_results": self.parameterization_module.calculate_metrics(last_result),
-        #     "rag_context_for_evaluation": self.rag_retriever.get_relevant_documents("interpret " + last_action['tool_name']),
-        #     "rag_context_for_evaluation_tools": self.rag_retriever_tools.get_relevant_documents("interpret " + action_taken['tool_name'])
-        # }
-        # final_prompt = self.prompt_assembler.build_prompt(
-        #     prompt_type="EVALUATE_GLOBAL_CRITERION",
-        #     context_bundle=context_bundle
-        # )
-        # response_json = self.api_client.call_multimodal(final_prompt, image=result.get('image_data'))
-        # return parse_json(response_json)
-        print("Is analysis complete not yet implemented")
-        return False
+    
 
     def _get_available_tools(self, tools_dir='src/tools'):
         """
@@ -667,8 +659,6 @@ class LLMOrchestrator:
                 code_lines.append(f"from src.tools.{submodule}.{tool_name} import {tool_name}")
         code_lines.append("") # Add a blank line for readability
 
-        # Add initial data loading for the generated script
-        # This assumes self.loaded_data contains the actual signal and fs
         # and self.signal_var_name and self.fs_var_name are the keys for them.
         actual_signal_data = self.loaded_data.get(self.signal_var_name)
         actual_sampling_rate = self.loaded_data.get(self.fs_var_name)

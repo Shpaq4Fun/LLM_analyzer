@@ -1,4 +1,11 @@
-# src/app.py
+"""
+Application entry point for AIDA (AI-Driven Analyzer).
+
+- Prints basic environment info (working directory and Python path) for debugging
+- Imports the Tkinter-based GUI App and a credentials check helper
+- Starts the GUI if credentials are available; otherwise exits gracefully
+"""
+
 import os
 import sys
 

@@ -1,11 +1,19 @@
+"""
+Quantitative parameterization of tool outputs.
+
+- Dispatcher calculate_quantitative_metrics adds domain-specific metrics to tool outputs
+- Supports time-series, frequency spectra, time-frequency matrices, cyclostationary maps,
+  and NMF decompositions
+- Also produces and persists supplementary figures for selectors where applicable
+"""
+
 # --- quantitative_parameterization_module.py ---
 
 # Import necessary libraries
 import numpy as np
-from scipy.stats import kurtosis, skew, jarque_bera, levy_stable
+from scipy.stats import kurtosis, skew, levy_stable, jarque_bera
 from scipy.signal import find_peaks, istft, firwin2, stft, filtfilt
-import re
-import os
+import os, pickle
 import matplotlib.pyplot as plt
 
 # === Helper Functions ===
@@ -21,7 +29,7 @@ def _extract_ids_from_path(image_path: str) -> tuple:
     try:
         filename = os.path.basename(image_path)
         parts = filename.split('_')
-        
+
         action_id = None
         # Check if the first part is like 'step1', 'step2', etc.
         if len(parts) > 0 and parts[0].startswith('step'):
@@ -32,7 +40,7 @@ def _extract_ids_from_path(image_path: str) -> tuple:
         # Extract run_id from the directory path
         run_dir = os.path.dirname(image_path)
         run_id = os.path.basename(run_dir)
-        
+
         # Basic validation that run_id looks correct
         if not run_id.startswith('run_'):
              run_id = None
@@ -87,7 +95,7 @@ def calculate_quantitative_metrics(tool_output: dict) -> dict:
         new_params = {}
     tool_output["new_params"] = new_params
     return tool_output
-    
+
 # === Specialized Handler Functions (Private) ===
 
 def _calculate_timeseries_stats(data_dict: dict) -> dict:
@@ -115,14 +123,14 @@ def _calculate_timeseries_stats(data_dict: dict) -> dict:
             cyclicity_strength = autocorr[dominant_period_samples] / autocorr[0]
 
     new_params = {
-        'kurtosis': float(kurtosis(signal)),
+        'kurtosis': float(kurtosis(signal, fisher=False)),
         'skewness': float(skew(signal)),
         'rms': float(rms_value),
         'crest_factor': float(peak_value / rms_value if rms_value > 0 else 0),
         "cyclicity_period_samples": int(dominant_period_samples),
         "cyclicity_strength": float(cyclicity_strength)
     }
-    
+
     # data_dict.update(new_params)
     return new_params
 
@@ -135,7 +143,7 @@ def _calculate_spectrum_stats(data_dict: dict) -> dict:
     spectrum_amps = data_dict.get(primary_data_key)
     secondary_data_key = data_dict.get('secondary_data')
     spectrum_freqs = data_dict.get(secondary_data_key)
-    
+
     if spectrum_amps is None or spectrum_freqs is None or \
        not isinstance(spectrum_amps, np.ndarray) or spectrum_amps.size == 0 or \
        not isinstance(spectrum_freqs, np.ndarray) or spectrum_freqs.size != spectrum_amps.size:
@@ -147,7 +155,7 @@ def _calculate_spectrum_stats(data_dict: dict) -> dict:
     new_params = {
         'dominant_frequency_hz': float(dominant_frequency_hz)
     }
-    
+
     # data_dict.update(new_params)
     return new_params
 
@@ -177,43 +185,49 @@ def _calculate_spectrogram_stats(data_dict: dict) -> dict:
     sk_selector = np.zeros(num_freq_bins)
     jb_selector = np.zeros(num_freq_bins)
     alpha_selector = np.zeros(num_freq_bins)
-
+    joint_selector = np.zeros(num_freq_bins)
     for i in range(num_freq_bins):
         energy_slice = spectrogram_matrix[i, :]
         sk_selector[i] = kurtosis(energy_slice, fisher=False)
         jb_selector[i] = jarque_bera(energy_slice)[0]
         alpha_selector[i] = estimate_alpha_stable(energy_slice)
+        joint_selector[i] = sk_selector[i] * jb_selector[i] * alpha_selector[i]
 
     sk_selector = normalize_data(sk_selector)
     jb_selector = normalize_data(jb_selector)
     alpha_selector = normalize_data(alpha_selector)
+    joint_selector = normalize_data(joint_selector)
 
     selectors_image_path = os.path.join(f"./run_state/{run_id}", f"step_{action_id}_selectors.png")
-    
-    fig, ax1 = plt.subplots(figsize=(12, 7))
-    
+    # if not os.path.isfile(selectors_image_path):
+    fig, ax1 = plt.subplots(figsize=(8, 7))
+
     color = 'tab:blue'
     ax1.set_xlabel('Frequency [Hz]')
     ax1.set_ylabel('Normality Test Statistics', color=color)
     ax1.plot(frequencies, sk_selector, color=color, linestyle='-', label='Spectral Kurtosis')
     ax1.plot(frequencies, jb_selector, color='tab:cyan', linestyle='--', label='Jarque-Bera (scaled)')
+    ax1.plot(frequencies, alpha_selector, color=color, linestyle=':', label='Alpha Parameter')
     ax1.tick_params(axis='y', labelcolor=color)
     ax1.grid(True, which='both', linewidth=0.5)
-    
+
     ax2 = ax1.twinx()
     color = 'tab:red'
-    ax2.set_ylabel('Alpha-Stable Parameter', color=color)
-    ax2.plot(frequencies, alpha_selector, color=color, linestyle=':', label='Alpha Parameter')
+    ax2.set_ylabel('Joint Parameter', color=color)
+    ax1.plot(frequencies, joint_selector, color=color, linestyle='-', label='Joint Selector', linewidth=3)
     ax2.tick_params(axis='y', labelcolor=color)
-    ax2.set_ylim(0, 2.1)
+    ax2.set_ylim(0, 1)
 
     fig.suptitle('Diagnostic Selectors')
     fig.tight_layout()
     lines, labels = ax1.get_legend_handles_labels()
     lines2, labels2 = ax2.get_legend_handles_labels()
-    ax2.legend(lines + lines2, labels + labels2, loc='upper right')
-    
+    ax1.legend(lines + lines2, labels + labels2, loc='upper right')
+
     plt.savefig(selectors_image_path)
+    fig_path = os.path.join(f"{selectors_image_path[:-2]}kl")
+    with open(fig_path, 'wb') as f:
+        pickle.dump(fig, f)
     plt.close()
 
     peak_sk_freq_hz = frequencies[np.argmax(sk_selector)]
@@ -235,7 +249,7 @@ def _calculate_spectrogram_stats(data_dict: dict) -> dict:
             "selectors_image_path": selectors_image_path,
         }
     }
-    
+
     # data_dict.update(new_params)
     return new_params
 
@@ -267,44 +281,53 @@ def _calculate_cyclomap_stats(data_dict: dict) -> dict:
     sk_selector = np.zeros(num_freq_bins)
     jb_selector = np.zeros(num_freq_bins)
     alpha_selector = np.zeros(num_freq_bins)
-
+    joint_selector = np.zeros(num_freq_bins)
     for i in range(num_freq_bins):
         energy_slice = csc_map[i, :]
         sk_selector[i] = kurtosis(energy_slice, fisher=False)
         jb_selector[i] = jarque_bera(energy_slice)[0]
         alpha_selector[i] = estimate_alpha_stable(energy_slice)
+        joint_selector[i] = sk_selector[i] * jb_selector[i] * alpha_selector[i]
+
 
     sk_selector = normalize_data(sk_selector)
     jb_selector = normalize_data(jb_selector)
     alpha_selector = normalize_data(alpha_selector)
+    joint_selector = normalize_data(joint_selector)
 
     selectors_image_path = os.path.join(f"./run_state/{run_id}", f"step_{action_id}_selectors.png")
-    
-    fig, ax1 = plt.subplots(figsize=(12, 8))
-    
-    color = 'tab:blue'
-    ax1.set_xlabel('Frequency [Hz]')
-    ax1.set_ylabel('Normality Test Statistics', color=color)
-    ax1.plot(carrier_frequencies, sk_selector, color=color, linestyle='-', label='Spectral Kurtosis')
-    ax1.plot(carrier_frequencies, jb_selector, color='tab:cyan', linestyle='--', label='Jarque-Bera')
-    ax1.tick_params(axis='y', labelcolor=color)
-    ax1.grid(True, which='both', linewidth=0.5)
-    
-    ax2 = ax1.twinx()
-    color = 'tab:red'
-    ax2.set_ylabel('Alpha-Stable Parameter', color=color)
-    ax2.plot(carrier_frequencies, alpha_selector, color=color, linestyle=':', label='Alpha Parameter')
-    ax2.tick_params(axis='y', labelcolor=color)
-    ax2.set_ylim(0, 2.1)
+    if not os.path.isfile(selectors_image_path):
+        fig, ax1 = plt.subplots(figsize=(12, 8))
 
-    fig.suptitle('Diagnostic Selectors')
-    fig.tight_layout()
-    lines, labels = ax1.get_legend_handles_labels()
-    lines2, labels2 = ax2.get_legend_handles_labels()
-    ax2.legend(lines + lines2, labels + labels2, loc='upper right')
-    
-    plt.savefig(selectors_image_path)
-    plt.close()
+        color = 'tab:blue'
+        ax1.set_xlabel('Frequency [Hz]')
+        ax1.set_ylabel('Normality Test Statistics', color=color)
+        ax1.plot(carrier_frequencies, sk_selector, color=color, linestyle='-', label='Spectral Kurtosis')
+        ax1.plot(carrier_frequencies, jb_selector, color='tab:cyan', linestyle='--', label='Jarque-Bera')
+        ax1.plot(carrier_frequencies, alpha_selector, color=color, linestyle=':', label='Alpha Parameter')
+        ax1.set_ylim(0, 1)
+        ax1.tick_params(axis='y', labelcolor=color)
+        ax1.grid(True, which='both', linewidth=0.5)
+
+        ax2 = ax1.twinx()
+        color = 'tab:red'
+        ax2.set_ylabel('Joint Parameter', color=color)
+        ax2.plot(carrier_frequencies, joint_selector, color=color, linestyle='-', label='Joint Parameter', linewidth=3)
+        ax2.tick_params(axis='y', labelcolor=color)
+        ax2.set_ylim(0, 1)
+
+        fig.suptitle('Diagnostic Selectors')
+        fig.tight_layout()
+        lines, labels = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax2.legend(lines + lines2, labels + labels2, loc='upper right')
+        # ax1.legend(lines, labels, loc='upper right')
+
+        plt.savefig(selectors_image_path)
+        fig_path = os.path.join(f"{selectors_image_path[:-2]}kl")
+        with open(fig_path, 'wb') as f:
+            pickle.dump(fig, f)
+        plt.close()
 
     peak_sk_freq_hz = carrier_frequencies[np.argmax(sk_selector)]
     peak_jb_freq_hz = carrier_frequencies[np.argmax(jb_selector)]
@@ -315,33 +338,46 @@ def _calculate_cyclomap_stats(data_dict: dict) -> dict:
     sk_ies = np.zeros(num_alpha_bins)
     jb_ies = np.zeros(num_alpha_bins)
     alpha_ies = np.zeros(num_alpha_bins)
-
+    joint_ies = np.zeros(num_alpha_bins)
     for i in range(num_alpha_bins):
         alpha_slice = csc_map[:,i]
         sk_ies[i] = sum(np.multiply(alpha_slice,sk_selector))
         jb_ies[i] = sum(np.multiply(alpha_slice,jb_selector))
         alpha_ies[i] = sum(np.multiply(alpha_slice,alpha_selector))
+        joint_ies[i] = sum(np.multiply(alpha_slice,joint_selector))
 
     ees_image_path = os.path.join(f"./run_state/{run_id}", f"step_{action_id}_PIES.png")
-    
-    fig, ax1 = plt.subplots(figsize=(12, 8))
-    
-    color = 'tab:blue'
-    ax1.set_xlabel('Modulating Frequency [Hz]')
-    ax1.set_ylabel('Value', color=color)
-    ax1.plot(cyclic_frequencies, sk_ies, color=color, linestyle='-', label='Spectral Kurtosis')
-    ax1.plot(cyclic_frequencies, jb_ies, color='tab:cyan', linestyle='--', label='Jarque-Bera')
-    ax1.plot(cyclic_frequencies, alpha_ies, color='tab:red', linestyle=':', label='Alpha Parameter')
-    ax1.tick_params(axis='y', labelcolor=color)
-    ax1.grid(True, which='both', linewidth=0.5)
+    if not os.path.isfile(ees_image_path):
+        fig, ax1 = plt.subplots(figsize=(12, 8))
 
-    fig.suptitle('Selector-based EES')
-    fig.tight_layout()
-    lines, labels = ax1.get_legend_handles_labels()
-    ax1.legend(lines, labels, loc='upper right')
-    
-    plt.savefig(ees_image_path)
-    plt.close()
+        color = 'tab:blue'
+        ax1.set_xlabel('Modulating Frequency [Hz]')
+        ax1.set_ylabel('Value', color=color)
+        ax1.plot(cyclic_frequencies, sk_ies, color=color, linestyle='-', label='Spectral Kurtosis')
+        ax1.plot(cyclic_frequencies, jb_ies, color=color, linestyle='--', label='Jarque-Bera')
+        ax1.plot(cyclic_frequencies, alpha_ies, color=color, linestyle=':', label='Alpha Parameter')
+
+        ax1.tick_params(axis='y', labelcolor=color)
+        ax1.grid(True, which='both', linewidth=0.5)
+
+        color = 'tab:red'
+        ax2 = ax1.twinx()
+        ax2.set_ylabel('Joint Parameter', color=color)
+        ax2.plot(cyclic_frequencies, joint_ies, color=color, linestyle='-', label='Joint Parameter', linewidth=3)
+        ax2.tick_params(axis='y', labelcolor=color)
+        ax2.set_ylim(0, 1)
+
+        fig.suptitle('Selector-based EES')
+        fig.tight_layout()
+        lines, labels = ax1.get_legend_handles_labels()
+        lines2, labels2 = ax2.get_legend_handles_labels()
+        ax2.legend(lines + lines2, labels + labels2, loc='upper right')
+
+        plt.savefig(ees_image_path)
+        fig_path = os.path.join(f"{ees_image_path[:-2]}kl")
+        with open(fig_path, 'wb') as f:
+            pickle.dump(fig, f)
+        plt.close()
 
 
     new_params = {
@@ -364,7 +400,7 @@ def _calculate_cyclomap_stats(data_dict: dict) -> dict:
             "ees_image_path": ees_image_path
         }
     }
-    
+
     # data_dict.update(new_params)
     return new_params
 
@@ -394,40 +430,54 @@ def _calculate_nmf_stats(data_dict: dict) -> dict:
         return {}
     n_components = H.shape[0]
     kurt = np.zeros(n_components)
+
+    # === Reconstruct the Signals ===
     n_iter = 32
     signals_reconstructed = []
-    
+
     if domain == 'time-frequency-matrix':
         nperseg = data_dict.get('nperseg')
         noverlap = data_dict.get('noverlap')
         for i in range(n_components):
             W_comp = np.expand_dims(W[:, i], axis=1)
             H_comp = np.expand_dims(H[i, :], axis=0)
+            W_comp = W_comp - np.min(W_comp)
+            H_comp = H_comp - np.min(H_comp)
+
+
+            # Reconstruct the magnitude
             reconstructed_magnitude = W_comp @ H_comp
+
+            # Initialize phase properly - use zeros or random phase
             if original_phase is not None and original_phase.shape == reconstructed_magnitude.shape:
                 phase = original_phase
             else:
-                phase = np.random.randn(*reconstructed_magnitude.shape)
-            # Iteratively refine the phase
+                # Initialize with random phase between -π and π
+                phase = np.random.uniform(-np.pi, np.pi, reconstructed_magnitude.shape)
+
+            # Griffin-Lim algorithm
             complex_spectrogram = reconstructed_magnitude * np.exp(1j * phase)
             for _ in range(n_iter):
+                # ISTFT to get time domain signal
                 _, reconstructed_signal = istft(
                     complex_spectrogram,
                     fs=sampling_rate,
                     nperseg=nperseg,
                     noverlap=noverlap
                 )
-                # Re-calculate STFT to get the new phase
-                _, _, complex_spectrogram = stft(
+                # STFT back to frequency domain
+                _, _, new_complex_spectrogram = stft(
                     reconstructed_signal,
                     fs=sampling_rate,
                     nperseg=nperseg,
-                    noverlap=noverlap
+                    noverlap=noverlap,
+                    nfft=2*nperseg
                 )
-                # Enforce the target magnitude
-                complex_spectrogram = reconstructed_magnitude * (complex_spectrogram / (np.abs(complex_spectrogram) + 1e-9))
+                # Keep original magnitude, update phase
+                new_phase = np.angle(new_complex_spectrogram)
+                complex_spectrogram = reconstructed_magnitude * np.exp(1j * new_phase)
 
-            # --- 3. Final Inverse STFT ---
+            # Final reconstruction
             _, final_reconstructed_signal = istft(
                 complex_spectrogram,
                 fs=sampling_rate,
@@ -436,6 +486,7 @@ def _calculate_nmf_stats(data_dict: dict) -> dict:
             )
             signals_reconstructed.append(final_reconstructed_signal)
             kurt[i] = kurtosis(final_reconstructed_signal, fisher=False)
+
     elif domain == 'bi-frequency-matrix':
         filter_order = 128
         for i in range(n_components):
@@ -450,26 +501,28 @@ def _calculate_nmf_stats(data_dict: dict) -> dict:
             normalized_freqs = carrier_frequencies / nyquist
 
             # Ensure frequencies start at 0 and end at 1 (for Nyquist)
-            freqs = np.concatenate(([0], normalized_freqs, [1]))
-            gains = np.concatenate(([0], normalized_gain, [0]))
-
+            # freqs = np.concatenate(([0], normalized_freqs, [1]))
+            # gains = np.concatenate(([0], normalized_gain, [0]))
+            freqs = normalized_freqs
+            gains = normalized_gain
             # Design the filter
             # The filter order must be even for firwin2
             if filter_order % 2 != 0:
                 filter_order += 1
-            
+
             filter_taps = firwin2(filter_order + 1, freqs, gains)
 
             # --- 2. Apply the Filter to the Original Signal ---
             filtered_signal = filtfilt(filter_taps, [1.0], original_signal_data)
             signals_reconstructed.append(filtered_signal)
             kurt[i] = kurtosis(filtered_signal, fisher=False)
+    # === End of Reconstruction ===
 
     # --- Generate and save the visual output ---
     time_axis = np.arange(len(signals_reconstructed[0])) / sampling_rate  # Assuming all signals have the same length
     output_image_path = os.path.join(f"./run_state/{run_id}", f"step_{action_id}_nmf_reconstruction.png")
 
-    fig, ax = plt.subplots(n_components,1,figsize=[9,7])
+    fig, ax = plt.subplots(n_components,1,figsize=[8,7])
     for i in range(n_components):
         ax[i].plot(time_axis, signals_reconstructed[i])
         ax[i].set_title(f'Reconstructed Component {i+1}')
@@ -478,6 +531,9 @@ def _calculate_nmf_stats(data_dict: dict) -> dict:
         ax[i].grid(True)
 
     plt.savefig(output_image_path)
+    fig_path = os.path.join(f"{output_image_path[:-2]}kl")
+    with open(fig_path, 'wb') as f:
+        pickle.dump(fig, f)
     plt.close()
 
     new_params = {

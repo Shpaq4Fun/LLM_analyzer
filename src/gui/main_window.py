@@ -1,19 +1,28 @@
+"""
+Tkinter/CustomTkinter GUI for AIDA: AI-Driven Analyzer.
+
+- Lets the user load data (.mat), build/load RAG indices, and enter analysis context
+- Launches LLMOrchestrator in a background thread and visualizes the pipeline
+- Displays logs and result plots with interactive selection
+"""
+
 # src/gui/main_window.py
 
 import customtkinter as ctk
 from tkinter import filedialog
 import scipy.io
 import numpy as np
-import os
+import os, pickle
 import threading
 import queue
 from src.core.rag_builder import RAGBuilder
 from src.core.LLMOrchestrator import LLMOrchestrator
 import h5py
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.figure import Figure
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg, NavigationToolbar2Tk
 from datetime import datetime
-
+from PIL import Image
+import matplotlib
+matplotlib.use('TkAgg')
 
 class App(ctk.CTk):
     def __init__(self):
@@ -22,8 +31,13 @@ class App(ctk.CTk):
         self.loaded_data = None
         self.rag_builder = RAGBuilder()
 
+        self.load_icon = ctk.CTkImage(Image.open("src/gui/assets/file-plus-2.png"), size=(24, 24))
+        self.play_icon = ctk.CTkImage(Image.open("src/gui/assets/play.png"), size=(24, 24))
+        self.build_icon = ctk.CTkImage(Image.open("src/gui/assets/library.png"), size=(24, 24))
+        self.load2_icon = ctk.CTkImage(Image.open("src/gui/assets/folder-down.png"), size=(24, 24))
+
         # --- Basic Window Configuration ---
-        self.title("AIDA: AI-Driven Analyzer        LORA: LLM-Orchestrated Research Agent")
+        self.title("AIDA: AI-Driven Analyzer")
         self.geometry("1800x1000")
         self.configure(fg_color="#1a202c")
 
@@ -34,19 +48,19 @@ class App(ctk.CTk):
         self.grid_columnconfigure(0, weight=0)
         self.grid_columnconfigure(1, weight=4)
         self.grid_columnconfigure(2, weight=4)
-        self.grid_rowconfigure(1, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
         # --- Header ---
-        header = ctk.CTkFrame(self, fg_color="#1a202c", corner_radius=0)
-        header.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 0))
-        header_label = ctk.CTkLabel(header, text="AIDA: AI-Driven Analyzer        LORA: LLM-Orchestrated Research Agent", font=ctk.CTkFont(size=20, weight="bold"), text_color="#f7fafc")
-        header_label.pack(pady=0)
+        # header = ctk.CTkFrame(self, fg_color="#1a202c", corner_radius=0)
+        # header.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 0))
+        # header_label = ctk.CTkLabel(header, text="AIDA: AI-Driven Analyzer        LORA: LLM-Orchestrated Research Agent", font=ctk.CTkFont(size=20, weight="bold"), text_color="#f7fafc")
+        # header_label.pack(pady=0)
 
         # --- Main Panels ---
         self._create_controls_panel()
         self._create_visualization_panel()
         self._create_log_panel()
-        
+
         self.log_message("System", "Welcome! \n\nInstructions: \n\n1. Load the data, \n2. Load RAG index (or build a new one), \n3. Enter your analysis objective and data description,\n4. Start the analysis.")
 
         # --- Threading and Queue Setup ---
@@ -66,52 +80,68 @@ class App(ctk.CTk):
         return panel
 
     def _create_controls_panel(self):
-        controls_panel = self._create_panel(self, 1, 0)
+        controls_panel = self._create_panel(self, 0, 0)
         controls_panel.grid_columnconfigure(0, weight=1)
-        controls_panel.grid_rowconfigure(5, weight=1) # Allow controls to space out
+        controls_panel.grid_rowconfigure(11, weight=1) # Allow controls to space out
 
-        header = ctk.CTkLabel(controls_panel, text="Controls", font=ctk.CTkFont(size=16, weight="bold"))
-        header.grid(row=0, column=0, sticky="w", padx=5, pady=2)
+        header = ctk.CTkLabel(controls_panel, text="AIDA", font=ctk.CTkFont(size=40, weight="bold"))
+        header.grid(row=0, column=0, sticky="n", padx=15, pady=(10,0))
+
+        header0 = ctk.CTkLabel(controls_panel, text="AI-Driven Analyzer", font=ctk.CTkFont(size=12))
+        header0.grid(row=1, column=0, sticky="n", padx=15, pady=(0,0))
+
+        header1 = ctk.CTkLabel(controls_panel, text="1. Load data", font=ctk.CTkFont(size=14))
+        header1.grid(row=2, column=0, sticky="w", padx=10, pady=2)
 
         # Load Data Button
-        self.load_data_btn = ctk.CTkButton(controls_panel, text="Load Data File (.mat)", command=self.load_data_file, fg_color=("#3182ce", "#3D5F7E"), hover_color="#2b6cb0", corner_radius=8, font=ctk.CTkFont(family="Helvetica", size=20, weight="bold"))
+        self.load_data_btn = ctk.CTkButton(controls_panel,
+                                           text="Load Data File (.mat)",
+                                           text_color="#f7fafc",
+                                           command=self.load_data_file,
+                                           fg_color=("#3182ce", "#3D5F7E"),
+                                           hover_color="#2b6cb0",
+                                           corner_radius=8,
+                                           image=self.load_icon,      # <--- PRZYPISZ IKONĘ
+                                           font=ctk.CTkFont(family="Helvetica", size=20, weight="bold"))
         self.load_data_btn.configure(height=50)
-        self.load_data_btn.grid(row=1, column=0, sticky="ew", padx=2, pady=0)
+        self.load_data_btn.grid(row=3, column=0, sticky="ew", padx=30, pady=0)
 
         # Objective Input
-        obj_label = ctk.CTkLabel(controls_panel, text="Analysis Objective:")
-        obj_label.grid(row=2, column=0, sticky="w", padx=5)
-        self.objective_input = ctk.CTkTextbox(controls_panel, height=248, fg_color="#4a5568", border_color="#5a6578", corner_radius=0)
-        self.objective_input.grid(row=3, column=0, sticky="ew", padx=2, pady=(0, 0))
+        obj_label = ctk.CTkLabel(controls_panel, text="2. Analysis Objective:", font=ctk.CTkFont(size=14))
+        obj_label.grid(row=4, column=0, sticky="w", padx=10)
+        self.objective_input = ctk.CTkTextbox(controls_panel, height=290, fg_color="#4a5568", border_color="#5a6578", corner_radius=0)
+        self.objective_input.grid(row=5, column=0, sticky="ew", padx=10, pady=(0, 0))
 
         # Data Description Input
-        desc_label = ctk.CTkLabel(controls_panel, text="Data Description:")
-        desc_label.grid(row=4, column=0, sticky="w", padx=5, pady=(10, 0))
-        self.data_description_input = ctk.CTkTextbox(controls_panel, height=150, fg_color="#4a5568", border_color="#5a6578", corner_radius=0)
-        self.data_description_input.grid(row=5, column=0, sticky="nsew", padx=2, pady=(0, 2))
-        
+        desc_label = ctk.CTkLabel(controls_panel, text="3. Data Description:", font=ctk.CTkFont(size=14))
+        desc_label.grid(row=6, column=0, sticky="w", padx=10, pady=(10, 0))
+        self.data_description_input = ctk.CTkTextbox(controls_panel, height=290, fg_color="#4a5568", border_color="#5a6578", corner_radius=0)
+        self.data_description_input.grid(row=7, column=0, sticky="new", padx=10, pady=(0, 2))
+
         # Buttons
+        buttons_label = ctk.CTkLabel(controls_panel, text="4. Knowledge Base:", font=ctk.CTkFont(size=14))
+        buttons_label.grid(row=8, column=0, sticky="nw", padx=10, pady=(10, 0))
         button_frame = ctk.CTkFrame(controls_panel, fg_color="transparent")
-        button_frame.grid(row=6, column=0, sticky="ew", padx=0, pady=0)
+        button_frame.grid(row=9, column=0, sticky="new", padx=20, pady=0)
         button_frame.grid_columnconfigure(0, weight=1)
         button_frame.grid_columnconfigure(1, weight=1)
         button_frame.grid_rowconfigure(0, weight=1)
 
-        self.build_rag_btn = ctk.CTkButton(button_frame, text="Build RAG Index\nfrom Knowledge Base", command=self.on_build_rag_index, fg_color=("#3182ce", "#3D5F7E"), hover_color="#2b6cb0", font=ctk.CTkFont(family="Helvetica", size=14, weight="bold"), width=180)
+        self.build_rag_btn = ctk.CTkButton(button_frame, text="Build RAG Index", command=self.on_build_rag_index, fg_color=("#3182ce", "#3D5F7E"), hover_color="#2b6cb0", font=ctk.CTkFont(family="Helvetica", size=14, weight="bold"), width=180, image=self.build_icon)
         self.build_rag_btn.configure(height=50)
-        self.build_rag_btn.grid(row=0, column=0, sticky="nsew", pady=2, padx=2)
+        self.build_rag_btn.grid(row=0, column=0, sticky="nsew", pady=2, padx=10)
 
-        self.load_rag_btn = ctk.CTkButton(button_frame, text="Load RAG Index\nfrom File", command=self.on_load_rag_index, fg_color=("#3182ce", "#3D5F7E"), hover_color="#2b6cb0", font=ctk.CTkFont(family="Helvetica", size=14, weight="bold"), width=180)
+        self.load_rag_btn = ctk.CTkButton(button_frame, text="Load RAG Index", command=self.on_load_rag_index, fg_color=("#3182ce", "#3D5F7E"), hover_color="#2b6cb0", font=ctk.CTkFont(family="Helvetica", size=14, weight="bold"), width=180, image=self.load2_icon)
         self.load_rag_btn.configure(height=50)
-        self.load_rag_btn.grid(row=0, column=1, sticky="nsew", pady=2, padx=2)
+        self.load_rag_btn.grid(row=0, column=1, sticky="nsew", pady=2, padx=10)
 
-        self.start_btn = ctk.CTkButton(controls_panel, text="Start Analysis", command=self.on_start_analysis, fg_color=("#3182ce", "#3D5F7E"), hover_color="#2b6cb0", font=ctk.CTkFont(family="Helvetica", size=20, weight="bold"))
+        self.start_btn = ctk.CTkButton(controls_panel, text="Start Analysis", command=self.on_start_analysis, fg_color=("#3182ce", "#3D5F7E"), hover_color="#2b6cb0", font=ctk.CTkFont(family="Helvetica", size=20, weight="bold"),image=self.play_icon)
         self.start_btn.configure(height=50)
-        self.start_btn.grid(row=7, column=0, sticky="ew", pady=2, padx=2)
+        self.start_btn.grid(row=11, column=0, sticky="ew", pady=2, padx=30)
 
 
     def _create_visualization_panel(self):
-        viz_panel = self._create_panel(self, 1, 1)
+        viz_panel = self._create_panel(self, 0, 1)
         viz_panel.grid_rowconfigure(1, weight=1)
         viz_panel.grid_rowconfigure(3, weight=5)
         viz_panel.grid_columnconfigure(0, weight=1)
@@ -131,16 +161,16 @@ class App(ctk.CTk):
         self.plot_canvas.grid(row=3, column=0, sticky="nsew", padx=2, pady=(0, 2))
 
     def _create_log_panel(self):
-        log_panel = self._create_panel(self, 1, 2)
+        log_panel = self._create_panel(self, 0, 2)
         log_panel.grid_rowconfigure(1, weight=1)
         log_panel.grid_columnconfigure(0, weight=1)
-        
+
         header = ctk.CTkLabel(log_panel, text="  Log  ", font=ctk.CTkFont(size=16, weight="bold"), bg_color="#303949")
         header.grid(row=0, column=0, sticky="w", padx=2, pady=0)
-        
-        self.log_textbox = ctk.CTkTextbox(log_panel, fg_color="#303949", text_color="#e2e8f0", activate_scrollbars=True, corner_radius=0, width=500)
+
+        self.log_textbox = ctk.CTkTextbox(log_panel, fg_color="#303949", text_color="#e2e8f0", activate_scrollbars=True, corner_radius=0, width=450)
         self.log_textbox.grid(row=1, column=0, sticky="nsew", padx=2, pady=(0, 2))
-        
+
         # Configure a tag for the sender's name to make it stand out
         self.log_textbox.tag_config("sender_style", foreground="#63b3ed", underline=True) # A nice light blue color
         # self.log_textbox.tag_config("llm_style", foreground="#ebebeb") # A nice light blue color
@@ -185,7 +215,7 @@ class App(ctk.CTk):
 
         self.log_message("User", f"Starting analysis with objective: \"{objective.strip()}\"")
         # self.log_message("System", "Backend processing would start here...")
-        
+
         # self.start_btn.configure(state="disabled")
 
         # Create a unique run ID for this analysis
@@ -201,7 +231,7 @@ class App(ctk.CTk):
             fs_var_name=self.fs_var_name,
             log_queue=self.rag_queue
         )
-        
+
         analysis_thread = threading.Thread(target=self.orchestrator.run_analysis_pipeline)
         analysis_thread.start()
         # self.orchestrator.delete_caches()
@@ -210,7 +240,7 @@ class App(ctk.CTk):
         """Opens a dialog to select the knowledge base directory and starts the RAG index build process."""
         self.log_message("System", "Please select the root directory of your knowledge base.")
         knowledge_base_path = filedialog.askdirectory(title="Select Knowledge Base Directory")
-        
+
         self.log_message("System", "Please select the root directory of your toolbase.")
         tools_path = filedialog.askdirectory(title="Select Tools Directory")
 
@@ -239,7 +269,7 @@ class App(ctk.CTk):
         """
         try:
             message, data = self.rag_queue.get_nowait()
-            
+
             if message == "log":
                 self.log_message(data['sender'], data['message'])
             elif message == "flowchart_add_step":
@@ -294,7 +324,7 @@ class App(ctk.CTk):
                 # f = h5py.File('mytestfile.hdf5', 'r')
             except:
                 mat_data = h5py.File(file_path, 'r')
-                
+
             # Filter out private variables (e.g., '__header__', '__version__') from the list of keys.
             # These are typically metadata from the MAT file and not actual data arrays.
             varnames = [
@@ -319,7 +349,7 @@ class App(ctk.CTk):
             # Optionally, populate the data description
             self.data_description_input.delete("1.0", "end")
             # self.data_description_input.insert("1.0", f"Loaded .mat file with variables: {', '.join(self.loaded_data.keys())},\n")
-            
+
             self._find_data_variables()
             # self.plot_time_series() # Removed: Plotting now handled by load_data action
 
@@ -343,8 +373,8 @@ class App(ctk.CTk):
             if len(v) == 1:
                 self.fs_var_name = k
                 break
-         
-        
+
+
         if self.signal_var_name and self.fs_var_name:
             self.log_message("System", f"Automatically identified signal variable: '{self.signal_var_name}' and fs variable: '{self.fs_var_name}'")
         else:
@@ -361,21 +391,18 @@ class App(ctk.CTk):
             widget.destroy()
 
         try:
+            '''
             # Use PIL to open the image
-            from PIL import Image, ImageTk
+            from PIL import Image
             img = Image.open(image_path)
-            
             # Resize image to fit canvas while maintaining aspect ratio
             canvas_width = self.plot_canvas.winfo_width()
             canvas_height = self.plot_canvas.winfo_height()
-            
             if canvas_width == 1 and canvas_height == 1: # Default size before actual rendering
                 canvas_width = 800 # Use a reasonable default
                 canvas_height = 600
-
             img_width, img_height = img.size
             aspect_ratio = img_width / img_height
-
             if img_width > canvas_width or img_height > canvas_height:
                 if (canvas_width / aspect_ratio) <= canvas_height:
                     new_width = canvas_width
@@ -384,15 +411,28 @@ class App(ctk.CTk):
                     new_height = canvas_height
                     new_width = int(canvas_height * aspect_ratio)
                 img = img.resize((new_width, new_height), Image.LANCZOS)
-
             self.tk_image = ImageTk.PhotoImage(img) # Keep a reference!
-            
             # Center the image on the canvas
             x_center = canvas_width / 2
             y_center = canvas_height / 2
-            
             canvas_image_id = self.plot_canvas.create_image(x_center, y_center, image=self.tk_image, anchor="center")
             self.plot_canvas.image = self.tk_image # Store reference to prevent garbage collection
+            '''
+            fig_path = os.path.join(f"{image_path[:-2]}kl")
+            with open(fig_path, 'rb') as f:
+                fig = pickle.load(f)
+            # Create a canvas widget to display the figure
+            fig.set_size_inches(6, 6)
+            canvas = FigureCanvasTkAgg(fig, master=self.plot_canvas)
+            canvas.draw()
+
+            # Create a toolbar for the canvas
+            toolbar = NavigationToolbar2Tk(canvas, self.plot_canvas, pack_toolbar=False)
+            toolbar.update()
+
+            # Pack the canvas and the toolbar
+            toolbar.pack(side="top", fill="x", expand=False)
+            canvas.get_tk_widget().pack(side="top", fill="both", expand=True)
 
         except Exception as e:
             self.log_message("System", f"Error displaying image: {e}")
@@ -409,7 +449,7 @@ class App(ctk.CTk):
         font_bold = ctk.CTkFont(family="Arial", size=12, weight="bold")
         text_content = f"{action_id}: {tool_name}"
         text_width = font_bold.measure(text_content)
-        
+
         padding = 30  # 15px padding on each side
         dynamic_block_width = max(self.flowchart_block_width, text_width + padding)
 
@@ -422,7 +462,7 @@ class App(ctk.CTk):
         # --- Draw Block ---
         rect_id = canvas.create_rectangle(x1, y1, x2, y2, fill="#4a5568", outline="#63b3ed", width=2)
         self.flowchart_blocks[rect_id] = data
-        
+
         # --- Arrow Drawing ---
         if self.last_flowchart_rect_id is not None:
             # last_coords = canvas.coords(self.last_flowchart_rect_id)
@@ -438,10 +478,10 @@ class App(ctk.CTk):
                 # For a new row, draw a vertical line down, then horizontal, then vertical up to the new block
                 start_x = self.last_coords[2] - ( (self.last_coords[2] - self.last_coords[0]) / 2 )
                 start_y = self.last_coords[3]
-                
+
                 # The point where the line turns from down to right
                 turn_y = start_y + self.flowchart_vertical_spacing / 2
-                
+
                 # End point at the top-middle of the new block
                 end_x = x1 + dynamic_block_width / 2
                 end_y = y1
@@ -456,13 +496,13 @@ class App(ctk.CTk):
                                            text=text_content, fill="white", font=font_bold)
         text_output_id = canvas.create_text(x1 + dynamic_block_width / 2, y1 + 2 * self.flowchart_block_height / 3,
                                            text=f"Output: {output_variable}", fill="#a0aec0", font=("Arial", 9))
-        
+
         block_tag = f"block_{rect_id}"
         canvas.addtag_withtag(block_tag, rect_id)
         canvas.addtag_withtag(block_tag, text_tool_id)
         canvas.addtag_withtag(block_tag, text_output_id)
         canvas.tag_bind(block_tag, "<Button-1>", lambda event, r_id=rect_id: self._on_flowchart_click(event, r_id))
-        
+
         # --- Update for Next Block ---
         self.last_flowchart_rect_id = rect_id
         self.last_coords = [x1, y1, x2, y2]
@@ -475,8 +515,8 @@ class App(ctk.CTk):
         if self.flowchart_x_offset + dynamic_block_width > canvas.winfo_width() and canvas.winfo_width() > 0:
             self.flowchart_x_offset = 10
             self.flowchart_y_offset += self.flowchart_block_height + self.flowchart_vertical_spacing
-            
-            if self.flowchart_y_offset + self.flowchart_block_height > canvas.winfo_height():
+
+            if self.flowchart_y_offset + self.flowchart_block_height > 1000:#canvas.winfo_height():
                 self.log_message("System", "Flowchart content exceeds canvas height.")
 
     def _on_flowchart_click(self, event, rect_id):
@@ -484,7 +524,7 @@ class App(ctk.CTk):
         if rect_id in self.flowchart_blocks:
             action_data = self.flowchart_blocks[rect_id]
             action_id = action_data.get('action_id')
-            
+
             # The orchestrator instance is needed to get the run_id
             if not hasattr(self, 'orchestrator') or self.orchestrator is None:
                 self.log_message("System", "Error: Orchestrator not initialized, cannot find plots.")
@@ -496,13 +536,13 @@ class App(ctk.CTk):
 
             run_id = self.orchestrator.run_id
             run_dir = f"./run_state/{run_id}"
-            
+
             # The first step (ID 0) is special, its plot name is different
             if action_id == 0:
                 plot_prefix = f"step_{action_id}_input_image"
             else:
                 plot_prefix = f"step_{action_id}_"
-            
+
             try:
                 if not os.path.exists(run_dir):
                     self.log_message("System", f"Error: Run directory not found at {run_dir}")
@@ -548,5 +588,5 @@ class App(ctk.CTk):
         if selected_path:
             # self.log_message("Flowchart", f"Displaying plot {choice} for {action_data.get('tool_name')} (Action ID: {action_data.get('action_id')})")
             self._display_image_on_plot_canvas(selected_path)
-        
+
         menu.destroy()

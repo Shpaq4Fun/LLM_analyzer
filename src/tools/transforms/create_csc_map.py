@@ -1,34 +1,33 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import signal
-from scipy.fft import fft
+import os, pickle
 
 def create_csc_map(
         data: dict,
         output_image_path: str,
         min_alpha: int = 1,
-        max_alpha: int = 200,
+        max_alpha: int = 150,
         window: int = 256,
         overlap: int = 220,
 ) -> dict:
     """
-    Calculates and saves the Cyclic Spectral Coherence (CSC) map for a signal.
+    Compute and save the Cyclic Spectral Coherence (CSC) map for a signal.
 
-    Args:
-        signal_data (np.ndarray): 1D NumPy array containing the time-series signal.
-        output_image_path (str): The full path where the output PNG image will be saved.
-        min_alpha (int, optional): The minimum cyclic frequency (alpha) to calculate in Hz. Defaults to 1.
-        max_alpha (int, optional): The maximum cyclic frequency (alpha) to calculate in Hz. Defaults to 200.
-        window (int, optional): The length of segments for analysis. Defaults to 256.
-        overlap (int, optional): Number of overlapping points between segments. Defaults to 220.
-        nfft (int, optional): Length of the FFT used for each segment. Defaults to 256.
+    Parameters (in `data` dict expected keys):
+    - primary_data: str, name of the array key holding the input signal
+    - sampling_rate: int, sampling frequency in Hz
+
+    Other parameters:
+    - min_alpha, max_alpha: range of cyclic (modulating) frequencies [Hz]
+    - window: window length used for analysis (and nfft)
+    - overlap: number of overlapping samples between windows
 
     Returns:
-        dict: A dictionary containing the results, with the following keys:
-              'cyclic_frequencies' (np.ndarray): Array of cyclic frequencies (alpha).
-              'carrier_frequencies' (np.ndarray): Array of carrier frequencies (f).
-              'csc_map' (np.ndarray): 2D array of the CSC magnitude.
-              'image_path' (str): The path where the output image was saved.
+    - dict with keys:
+        cyclic_frequencies, carrier_frequencies, csc_map, domain ('bi-frequency-matrix'),
+        primary_data, secondary_data, tertiary_data, sampling_rate, original_signal_data,
+        image_path
     """
     # --- Placeholder Logic to Generate a Synthetic CSC Map ---
     primary_data = data.get('primary_data')
@@ -51,17 +50,21 @@ def create_csc_map(
                                                                     fs=sampling_rate, 
                                                                     nover=overlap)
     csc_map = np.abs(csc_map)
-    # --- Generate and save the visual output ---
-    plt.figure(figsize=(10, 8))
-    # plt.contourf(cyclic_frequencies, carrier_frequencies, csc_map, levels=20, cmap='viridis')
-    plt.pcolormesh(cyclic_frequencies, carrier_frequencies/1000, csc_map, shading='gouraud', cmap='jet_r')
-    plt.ylabel('Carrier Frequency (f) [kHz]')
-    plt.xlabel('Cyclic Frequency (alpha) [Hz]')
-    plt.title('Cyclic Spectral Coherence (CSC) Map')
-    plt.colorbar(label='Coherence Magnitude')
-    plt.tight_layout()
-    plt.savefig(output_image_path)
-    plt.close()
+    if not os.path.isfile(output_image_path):
+        # --- Generate and save the visual output ---
+        fig, ax = plt.subplots(1,1,figsize=(7, 6))
+        # plt.contourf(cyclic_frequencies, carrier_frequencies, csc_map, levels=20, cmap='viridis')
+        im = ax.pcolormesh(cyclic_frequencies, carrier_frequencies/1000, csc_map, shading='nearest', cmap='jet_r')
+        ax.set_ylabel('Carrier Frequency (f) [kHz]')
+        ax.set_xlabel('Cyclic Frequency (alpha) [Hz]')
+        ax.set_title('Cyclic Spectral Coherence (CSC) Map')
+        fig.colorbar(im, ax=ax, label='Coherence Magnitude')
+        fig.tight_layout()
+        plt.savefig(output_image_path)
+        fig_path = os.path.join(f"{output_image_path[:-2]}kl")
+        with open(fig_path, 'wb') as f:
+            pickle.dump(fig, f)
+        plt.close()
 
     # --- Return the structured data output ---
     results = {
