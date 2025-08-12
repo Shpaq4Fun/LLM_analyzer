@@ -2,7 +2,7 @@
 
 This document summarizes the public functions and classes across the AIDA codebase (src/), based on in-code docstrings.
 
-Note: This is a human-authored static summary. For complete details, see the source files and docstrings in the repository.
+Note: This is a static summary. For complete details, see the source files and docstrings in the repository.
 
 ---
 
@@ -21,6 +21,7 @@ Note: This is a human-authored static summary. For complete details, see the sou
   - class LLMOrchestrator
     - run_analysis_pipeline() -> None
     - extract_text_and_json(response_string: str) -> tuple[str, dict | None]
+    - _generate_content_with_fallback(prompt: str) -> genai.GenerativeModel.Response
     - _create_metaknowledge() -> None
     - _fetch_next_action(evaluation: str) -> dict
     - _execute_current_pipeline() -> dict
@@ -86,7 +87,7 @@ Note: This is a human-authored static summary. For complete details, see the sou
 
 ### decomposition
 - src/tools/decomposition/decompose_matrix_nmf.py
-  - decompose_matrix_nmf(data: dict, output_image_path: str, n_components: int = 3, max_iter: int = 150, tolerance: float = 1e-4) -> dict
+  - decompose_matrix_nmf(data: dict, output_image_path: str, n_components: int = 3, max_iter: int = 150) -> dict
 - src/tools/decomposition/select_component.py
   - select_component(data: dict, output_image_path: str, component_index: int) -> dict
 

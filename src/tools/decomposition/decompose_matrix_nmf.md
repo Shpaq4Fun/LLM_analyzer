@@ -51,7 +51,7 @@ This is a powerful processing tool for source separation and pattern discovery. 
 | output\_dir | str | The directory to save the output plots to. | Yes | None |
 | n\_components | int | The number of components to extract. This is a critical parameter. | No | 3 |
 | max\_iter | int | The maximum number of iterations for the algorithm. | No | 200 |
-| tolerance | float | The tolerance for the stopping condition based on convergence. | No | 1e-4 |
+
 
 ## **6\. Next Steps Enabled**
 

@@ -1,5 +1,5 @@
 venv/
-prototypes/
 run_state/
 vector_store/
 vector_store_tools/
+knowledge_base/

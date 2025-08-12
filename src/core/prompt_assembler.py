@@ -92,13 +92,12 @@ class PromptAssembler:
         # Format the retrieved documents into a single string.
         rag_context_str = "\n\n".join([f"Context Snippet {i+1}:\n{doc.page_content}" for i, doc in enumerate(retrieved_docs)])
         rag_context_str_tools = "\n\n".join([f"Context Snippet {i+1}:\n{doc.page_content}" for i, doc in enumerate(retrieved_docs_tools)])
-        tools_list = "\n\n".join(tools_list)
+        # tools_list is now already a string containing the content of TOOLS_REFERENCE.md
         # === Step 3: Assemble the Final Prompt from a Static Template ===
         # Use a pre-defined template and inject all the gathered information.
 
         final_prompt = self.templates['meta_template'].format(
             specific_task_prompt=self.templates['metaknowledge'].format(
-            json_schema=self.get_metaknowledge_json_schema_as_string(), # A helper function to get our target schema
             ground_truth_summary=ground_truth_summary,
             rag_context=rag_context_str,
             rag_context_tools=rag_context_str_tools,
@@ -106,7 +105,7 @@ class PromptAssembler:
             user_data_description=context_bundle['user_data_description'],
             user_analysis_objective=context_bundle['user_analysis_objective']
         ))
-
+        # print(final_prompt)
         return final_prompt
 
     def get_metaknowledge_json_schema_as_string(self):
@@ -148,7 +147,7 @@ class PromptAssembler:
         # Format the retrieved documents into a single string.
         rag_context_str = "\n\n".join([f"Context Snippet {i+1}:\n{doc.page_content}" for i, doc in enumerate(retrieved_docs)])
         rag_context_str_tools = "\n\n".join([f"Context Snippet {i+1}:\n{doc.page_content}" for i, doc in enumerate(retrieved_docs_tools)])
-        tools_list = "\n".join(tools_list)
+        # tools_list is now already a string containing the content of TOOLS_REFERENCE.md
 
         #TODO: read context_bundle["last_result"]["image_path"] and then iterate over context_bundle["last_result"]["supporting_image_paths"] to get paths to images for evaluation
         ipath = context_bundle["last_result"]["image_path"]

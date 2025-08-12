@@ -11,7 +11,7 @@ Responsibilities:
 
 import google.generativeai as genai
 from difflib import SequenceMatcher
-import os, re
+import os
 import pickle
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
@@ -60,13 +60,10 @@ class LLMOrchestrator:
         self.max_iterations = 20   # A safety break to prevent infinite loops
 
     # --- Main Public Method ---
-
     def run_analysis_pipeline(self):
         """The main entry point to start the entire autonomous analysis process."""
         final_script = []
         # === PHASE 1: INITIALIZATION & FIRST ACTION ===
-        self.tools_list = self._get_available_tools()
-
         print("Phase 1: Initialization & First Action...")
         self._create_metaknowledge()
         
@@ -169,37 +166,13 @@ class LLMOrchestrator:
         # return final_script
     
     # --- Private Helper Methods ---
-    def _create_metaknowledge(self):
-        """Uses a static prompt to convert user text into a structured JSON."""
-        context_bundle = {
-            "raw_signal_data": self.loaded_data[self.signal_var_name],
-            "sampling_frequency": self.loaded_data[self.fs_var_name][0] if self.fs_var_name else 1,
-            "user_data_description": self.user_data_description,
-            "user_analysis_objective": self.user_objective,
-            "rag_retriever": self.rag_retriever,
-            "rag_retriever_tools": self.rag_retriever_tools,
-            "tools_list": self.tools_list
-        }
-        
-        prompt = self.prompt_assembler.build_prompt(
-            prompt_type="METAKNOWLEDGE_CONSTRUCTION",
-            context_bundle=context_bundle
-        )
-        
-        # For now, we'll just print the prompt to the console.
-        # The next step would be to send this to the Gemini API.
-        # print("--- METAKNOWLEDGE PROMPT ---")
-        # print(prompt)
-        # print("--------------------------")
-        # self.log_queue.put(("log", {"sender": "Prompt Assembler", "message": f"--- METAKNOWLEDGE PROMPT ---\n {prompt}"}))
-
-        # Placeholder for the response
+    def _generate_content_with_fallback(self, prompt):
+        """
+        Attempts to generate content using the current model, falling back to other models if needed.
+        Returns the response object and logs the active model.
+        """
         try:
-            # credentials = get_credentials()
-            # genai.configure(credentials=credentials)
-            
             try:
-                # self.model = genai.GenerativeModel(self.model_name)
                 response = self.model.generate_content(prompt)
             except:
                 try:
@@ -226,14 +199,34 @@ class LLMOrchestrator:
                                 self.model = genai.GenerativeModel("gemini-1.5-flash")
                                 response = self.model.generate_content(prompt)
             self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"--- ACTIVE MODEL: {self.model_name} ---"}))
-            # response = self.genai_client.models.generate_content(prompt)
-            # aaa = json.dumps(response_text, indent=6)
+            return response
+        except Exception as e:
+            raise Exception(f"Error calling Gemini API: {e}")
+
+    def _create_metaknowledge(self):
+        """Uses a static prompt to convert user text into a structured JSON."""
+        context_bundle = {
+            "raw_signal_data": self.loaded_data[self.signal_var_name],
+            "sampling_frequency": self.loaded_data[self.fs_var_name][0] if self.fs_var_name else 1,
+            "user_data_description": self.user_data_description,
+            "user_analysis_objective": self.user_objective,
+            "rag_retriever": self.rag_retriever,
+            "rag_retriever_tools": self.rag_retriever_tools,
+            "tools_list": self._get_available_tools()
+        }
+        
+        prompt = self.prompt_assembler.build_prompt(
+            prompt_type="METAKNOWLEDGE_CONSTRUCTION",
+            context_bundle=context_bundle
+        )
+        
+        # Generation of the response by the LLM trying the best models first.
+        try:
+            response = self._generate_content_with_fallback(prompt)
             # Clean up the response text
             response_text = response.text.strip().replace('```json', '').replace('```', '')
-            print(response_text)
             self.metaknowledge = json.loads(response_text)
             sss = json.dumps(self.metaknowledge, indent=4)
-            # self.metaknowledge = response_text
             if self.fs_var_name is None:
                 self.fs_var_name = 'fs'
                 self.loaded_data[self.fs_var_name] = int(self.metaknowledge['data_summary']['sampling_frequency_hz'])
@@ -393,7 +386,6 @@ class LLMOrchestrator:
                         "image_path": os.path.join(self.state_dir, f"step_{len(self.pipeline_steps)}_decompose_matrix_nmf.png"),
                         "n_components": 3,
                         "max_iter": 150,
-                        "tolerance": 1e-4
                     },
                     "output_variable": f"nmf_results_{len(self.pipeline_steps)}"
                 }
@@ -429,8 +421,6 @@ class LLMOrchestrator:
         """Translates the action list to code and executes it in a separate process."""
         import tempfile
         import subprocess
-        import os
-        import json
         
         # Generate the script code
         script_code = self._translate_actions_to_code()
@@ -515,12 +505,12 @@ class LLMOrchestrator:
             "sequence_steps": self.pipeline_steps,
             "rag_retriever": self.rag_retriever,
             "rag_retriever_tools": self.rag_retriever_tools,
-            "tools_list": self.tools_list,
+            "tools_list": self._get_available_tools(),
             "user_data_description": self.user_data_description,
             "user_analysis_objective": self.user_objective,
             "result_history": self.result_history
         }
-
+        
         # 2. It calls the assembler to build the prompt
 
         # 
@@ -531,47 +521,14 @@ class LLMOrchestrator:
             prompt_type="EVALUATE_LOCAL_CRITERION",
             context_bundle=context_bundle
         )
-        # print("--- LOCAL EVALUATION PROMPT ---")
-        # print(prompt[0])
-        # self.log_queue.put(("log", {"sender": "Prompt Assembler", "message": f"--- RESULT EVALUATION PROMPT ---\n {prompt[0]} \n--------------------------"}))
-
         try:
-            # credentials = get_credentials()
-            # genai.configure(credentials=credentials)
-            try:
-                # self.model = genai.GenerativeModel(self.model_name)
-                response = self.model.generate_content(prompt)
-            except:
-                try:
-                    self.model_name = "gemini-2.5-flash"
-                    self.model = genai.GenerativeModel("gemini-2.5-flash")
-                    response = self.model.generate_content(prompt)
-                except:
-                    try:
-                        self.model_name = "gemini-2.0-pro"
-                        self.model = genai.GenerativeModel("gemini-2.0-pro")
-                        response = self.model.generate_content(prompt)
-                    except:
-                        try:
-                            self.model_name = "gemini-2.0-flash"
-                            self.model = genai.GenerativeModel("gemini-2.0-flash")
-                            response = self.model.generate_content(prompt)
-                        except:
-                            try:
-                                self.model_name = "gemini-1.5-pro"
-                                self.model = genai.GenerativeModel("gemini-1.5-pro")
-                                response = self.model.generate_content(prompt)
-                            except:
-                                self.model_name = "gemini-1.5-flash"
-                                self.model = genai.GenerativeModel("gemini-1.5-flash")
-                                response = self.model.generate_content(prompt)
-            self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"--- ACTIVE MODEL: {self.model_name} ---"}))
+            response = self._generate_content_with_fallback(prompt)
 
             # response = self.genai_client.models.generate_content(prompt)
             # aaa = json.dumps(response_text, indent=6)
             # Clean up the response text
             evaluation = response.text.strip().replace('```json', '').replace('```', '')
-            
+
             # text_description, self.proposed_action = self.extract_text_and_json(response_text)
             text_description = json.loads(evaluation).get('evaluation_summary')
             proposed_action = json.loads(evaluation).get("tool_name")
@@ -585,7 +542,7 @@ class LLMOrchestrator:
             # print(params)
             # print(params.keys())
             self.eval_history.append(text_description)
-        
+
             self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"--- RESULT EVALUATION RESPONSE ---\n Evaluation summary: {text_description} \n Proposed action: {json.dumps(proposed_action, indent=4)} \n Input variable: {input_variable} \n Justification: {justification} \n Custom parameters: {params} \n Action final: {is_final}\n--------------------------"}))
 
         except Exception as e:
@@ -593,22 +550,23 @@ class LLMOrchestrator:
             evaluation = {"status": "error", "message": str(e)}
         return evaluation
 
-    
-
-    def _get_available_tools(self, tools_dir='src/tools'):
+    def _get_available_tools(self, tools_reference_path='src/docs/TOOLS_REFERENCE.md'):
         """
-        Scans the tools directory to find all available Python tool scripts.
+        Loads the content of the TOOLS_REFERENCE.md file for better API description.
         """
-        available_tools = []
-        for root, _, files in os.walk(tools_dir):
-            for file in files:
-                if file.endswith('.py') and not file.startswith('__'):
-                    tool_name = os.path.splitext(file)[0]
-                    available_tools.append(tool_name)
-        # print(f"Available tools: {available_tools}")
-        self.log_queue.put(("log", {"sender": "System", "message": f"--- TOOLS---\n {available_tools} \n"}))
+        try:
+            with open(tools_reference_path, 'r', encoding='utf-8') as f:
+                tools_reference_content = f.read()
 
-        return available_tools
+            self.log_queue.put(("log", {"sender": "System", "message": f"--- TOOLS REFERENCE LOADED ---\n {tools_reference_path} \n"}))
+            return tools_reference_content
+
+        except FileNotFoundError:
+            self.log_queue.put(("log", {"sender": "System", "message": f"--- ERROR: TOOLS REFERENCE FILE NOT FOUND ---\n {tools_reference_path} \n"}))
+            return "Tools reference file not found."
+        except Exception as e:
+            self.log_queue.put(("log", {"sender": "System", "message": f"--- ERROR LOADING TOOLS REFERENCE ---\n {str(e)} \n"}))
+            return f"Error loading tools reference: {str(e)}"
 
     def _translate_actions_to_code(self):
         """
