@@ -9,8 +9,8 @@ Application entry point for AIDA (AI-Driven Analyzer).
 import os
 import sys
 
-print(f"Current Working Directory: {os.getcwd()}")
-print(f"Python Path: {sys.path}")
+# print(f"Current Working Directory: {os.getcwd()}")
+# print(f"Python Path: {sys.path}")
 
 from src.gui.main_window import App
 from src.core.authentication import get_credentials

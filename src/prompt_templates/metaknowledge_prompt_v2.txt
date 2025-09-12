@@ -1,4 +1,3 @@
-
 Your current task is to parse the user's description and objective, along with provided context, and convert this information into a single, structured JSON object.
 
 Adhere strictly to the following JSON schema:
@@ -26,7 +25,9 @@ Adhere strictly to the following JSON schema:
     "primary_goal": "string",
     "target_fault_type": "string or null",
     "target_signal_feature": "string",
-    "fallback_goal": "string or null"
+    "fallback_goal": "string or null",
+    "user_data_description": "{user_data_description}",
+    "user_analysis_objective": "{user_analysis_objective}" 
   }},
   "initial_hypotheses": ["string"]
 }}```

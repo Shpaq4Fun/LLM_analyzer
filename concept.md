@@ -319,7 +319,7 @@ The proposed stack is powerful yet simple to set up and run locally:
 3. **Embedding Model: sentence-transformers (via Hugging Face).** This library provides access to state-of-the-art, free, and locally runnable models for converting text into embeddings. A great starting model is all-MiniLM-L6-v2.
 4. **Vector Database: ChromaDB.** This is a fantastic open-source vector database that is incredibly easy to set up because it can run entirely in-memory or be persisted to a folder on your disk, requiring no separate server.
 
-After I run this script once, I will have a `vector_store` folder on my disk. The `LLMOrchestrator` will not rebuild this. It will simply load it. Then, whenever the orchestrator needs to search for context, it would just call `self.rag_retriever.get_relevant_documents(query)`.
+After I run this script once, I will have a `vector_store` folder on my disk. The `LLMOrchestrator` will not rebuild this. It will simply load it. Then, whenever the orchestrator needs to search for context, it would just call `self.rag_retriever.invoke(query)`.
 
 ## **15\. Quantitative parameterization module**
 
@@ -405,7 +405,7 @@ def _evaluate_result(self, result, action_taken):
         "metaknowledge": self.metaknowledge,
         "last_action": action_taken,
         "quantitative_results": self.parameterization_module.calculate_metrics(result),
-        "rag_context_for_evaluation": self.rag_retriever.get_relevant_documents("interpret " + action_taken['tool_name'])
+        "rag_context_for_evaluation": self.rag_retriever.invoke("interpret " + action_taken['tool_name'])
     }
 
     # 2. It calls the assembler to build the prompt

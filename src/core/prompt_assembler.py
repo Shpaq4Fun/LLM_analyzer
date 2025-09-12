@@ -33,12 +33,6 @@ class PromptAssembler:
         elif prompt_type == "EVALUATE_LOCAL_CRITERION":
             temp_prompt =  self._build_evaluate_local_prompt(context_bundle)
 
-        elif prompt_type == "EVALUATE_GLOBAL_CRITERION":
-            temp_prompt =  self._build_evaluate_global_prompt(context_bundle)
-
-        elif prompt_type == "ATTEMPT_REFINEMENT":
-            temp_prompt =  self._build_refinement_prompt(context_bundle)
-
         else:
             temp_prompt = []
             raise ValueError(f"Unknown prompt type: {prompt_type}")
@@ -75,7 +69,8 @@ class PromptAssembler:
         number_of_samples = len(context_bundle['raw_signal_data'])
 
         # Create a formatted string of these ground truth facts.
-        ground_truth_summary = f"""- Signal Length: {signal_length_sec:.2f} seconds
+        ground_truth_summary = f"""
+- Signal Length: {signal_length_sec:.2f} seconds
     - Total Samples: {number_of_samples}
     - Sampling Frequency: {context_bundle['sampling_frequency']} Hz"""
 
@@ -85,9 +80,9 @@ class PromptAssembler:
 
         # Combine user texts to create a rich query for the RAG index
         rag_query = context_bundle['user_data_description'] + " " + context_bundle['user_analysis_objective']
-        retrieved_docs = context_bundle['rag_retriever'].get_relevant_documents(rag_query)
+        retrieved_docs = context_bundle['rag_retriever'].invoke(rag_query)
         tools_list = context_bundle['tools_list']
-        retrieved_docs_tools = context_bundle['rag_retriever_tools'].get_relevant_documents(rag_query)
+        retrieved_docs_tools = context_bundle['rag_retriever_tools'].invoke(rag_query)
 
         # Format the retrieved documents into a single string.
         rag_context_str = "\n\n".join([f"Context Snippet {i+1}:\n{doc.page_content}" for i, doc in enumerate(retrieved_docs)])
@@ -96,42 +91,16 @@ class PromptAssembler:
         # === Step 3: Assemble the Final Prompt from a Static Template ===
         # Use a pre-defined template and inject all the gathered information.
 
-        final_prompt = self.templates['meta_template'].format(
-            specific_task_prompt=self.templates['metaknowledge'].format(
+        final_prompt = self.templates['metaknowledge_prompt_v2'].format(
             ground_truth_summary=ground_truth_summary,
             rag_context=rag_context_str,
             rag_context_tools=rag_context_str_tools,
             tools_list=tools_list,
             user_data_description=context_bundle['user_data_description'],
             user_analysis_objective=context_bundle['user_analysis_objective']
-        ))
+        )
         # print(final_prompt)
         return final_prompt
-
-    def get_metaknowledge_json_schema_as_string(self):
-        # In a real application, this would load a JSON schema from a file.
-        # For this prototype, we'll define it as a string.
-        return """
-    {
-        "signal_type": "string (e.g., 'vibration', 'acoustic', 'temperature')",
-        "machine_type": "string (e.g., 'rotating machinery', 'reciprocating compressor', 'HVAC unit')",
-        "component_under_test": "string (e.g., 'rolling element bearing', 'gearbox', 'piston')",
-        "fault_type_hypothesis": "string (e.g., 'inner race fault', 'gear tooth wear', 'unbalance')",
-        "signal_characteristics": [
-            "string (e.g., 'cyclostationary', 'transient', 'non-stationary', 'periodic')"
-        ],
-        "analysis_objective_tags": [
-            "string (e.g., 'fault detection', 'prognostics', 'condition monitoring', 'root cause analysis')"
-        ],
-        "analysis_objective": {
-            "primary_goal": "string",
-            "target_fault_type": "string or null",
-            "target_signal_feature": "string",
-            "fallback_goal": "string or null"
-        },
-        "initial_hypotheses": ["string"]
-    }
-    """
 
     def _build_evaluate_local_prompt(self, context_bundle: dict) -> str:
         """Handler for the 'Are results useful?' decision."""
@@ -139,9 +108,9 @@ class PromptAssembler:
 
         # Combine user texts to create a rich query for the RAG index
         rag_query = context_bundle['user_data_description'] + " " + context_bundle['user_analysis_objective'] + " " + context_bundle['last_action'].get('tool_name') + " next steps"
-        retrieved_docs = context_bundle['rag_retriever'].get_relevant_documents(rag_query)
+        retrieved_docs = context_bundle['rag_retriever'].invoke(rag_query)
         tools_list = context_bundle['tools_list']
-        retrieved_docs_tools = context_bundle['rag_retriever_tools'].get_relevant_documents(rag_query)
+        retrieved_docs_tools = context_bundle['rag_retriever_tools'].invoke(rag_query)
         result_history = context_bundle['result_history']
 
         # Format the retrieved documents into a single string.
@@ -180,39 +149,23 @@ class PromptAssembler:
         with open(action_documentation_path, 'r') as f:
             fileString = f.read()
             tool_doc = fileString
-            # tool_doc=markdown.markdown(fileString)
-        # print(context_bundle['metaknowledge'])
-        prompt0 = self.templates['meta_template'].format(
-            specific_task_prompt=self.templates['evaluate_local'].format(
-                metaknowledge=context_bundle['metaknowledge'],
-                last_action_name=context_bundle['last_action'].get('tool_name'),
-                last_action_documenation=tool_doc,
-                rag_context=rag_context_str,
-                rag_context_tools=rag_context_str_tools,
-                tools_list=tools_list,
-                result_history=result_history,
-                sequence_steps=json.dumps(context_bundle['sequence_steps'], indent=4),
-                last_result_params=context_bundle['last_result']['data']['new_params'],
-                objective=context_bundle['user_analysis_objective']
-            # Note: The image data is handled separately in the multimodal API call
-            )
+        last_result_params = context_bundle['last_result']['data']['new_params'] if 'new_params' in context_bundle['last_result']['data'] else {}
+        prompt0 = self.templates['evaluate_local_prompt_v2'].format(
+            metaknowledge=context_bundle['metaknowledge'],
+            # last_action_name=context_bundle['last_action'].get('tool_name'),
+            last_action_documenation=tool_doc,
+            # rag_context=rag_context_str,
+            # rag_context_tools=rag_context_str_tools,
+            tools_list=tools_list,
+            result_history=result_history,
+            sequence_steps=json.dumps(context_bundle['sequence_steps'], indent=4),
+            last_result_params=last_result_params
+            # objective=context_bundle['user_analysis_objective']
         )
 
         # print(prompt0)
         prompt=[prompt0,*image_prompts]
         return prompt
-
-    def _build_select_tool_prompt(self, context: dict) -> str:
-        """Handler for proposing the next action."""
-        return self.templates['select_tool'].format(
-            metaknowledge=context['metaknowledge'],
-            pipeline_history=context['pipeline_history'],
-            last_result_summary=context['last_result_summary'],
-            rag_context=context['rag_context_for_tools'],
-            exclusion_list=context.get('exclusion_list', []) # From our guardrails
-        )
-
-    # ... and so on for the other handlers (_build_evaluate_global_prompt, etc.) ...
 
     def _load_prompt_templates(self) -> dict:
         """A utility function to load all .txt prompt templates from a directory."""
@@ -220,7 +173,7 @@ class PromptAssembler:
         template_dir = "src/prompt_templates"
         for filename in os.listdir(template_dir):
             if filename.endswith(".txt"):
-                template_name = filename.replace('_prompt.txt', '')
+                template_name = filename.replace('.txt', '')
                 with open(os.path.join(template_dir, filename), 'r') as f:
                     templates[template_name] = f.read()
         return templates

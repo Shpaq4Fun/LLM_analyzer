@@ -8,7 +8,7 @@ Calculates the Cyclic Spectral Coherence (CSC) to reveal hidden periodicities in
 
 This is an advanced and computationally intensive analysis tool that is exceptionally powerful for detecting cyclostationary signals buried in heavy noise. **Use this tool when a standard spectrogram fails to show clear impulsive features but a fault is still suspected.**
 
-The CSC map is a bi-frequency representation that directly links **modulating frequencies (the alpha axis)** to the **carrier frequencies (the f axis)** they affect. A strong peak at a coordinate (alpha, f) is conclusive evidence that a cyclic event with frequency alpha is modulating the signal content at frequency f. This makes it superior to the spectrogram-then-envelope workflow for low signal-to-noise ratio cases, as it performs the demodulation and frequency analysis in a single, more robust step.
+The CSC map is a bi-frequency representation that directly links **modulating frequencies (the alpha axis)** to the **carrier frequencies (the f axis)** they affect. A strong peak at a coordinate (alpha, f) is conclusive evidence that a cyclic event with frequency alpha is modulating the signal content at frequency f. This makes it superior to the spectrogram-then-envelope workflow for low signal-to-noise ratio cases, as it performs the demodulation and frequency analysis in a single, more robust step. If the investigaiton is focused at some candidate modulation frequency, it is important to set the `max_alpha` parameter at at least four times that frequency to be able to observe at least four harmonic components.
 
 ## **3\. Input Specification**
 
@@ -39,7 +39,7 @@ The CSC map is a bi-frequency representation that directly links **modulating fr
 | data | dict | The dictionary containing the signal data and sampling rate. | Yes | None |
 | output\_dir | str | The directory where the output plot will be saved. | Yes | None |
 | min\_alpha | int | The minimum cyclic frequency (alpha) to calculate, in Hz. | No | 1 |
-| max\_alpha | int | The maximum cyclic frequency (alpha) to calculate, in Hz. | No | 200 |
+| max\_alpha | int | The maximum cyclic frequency (alpha) to calculate, in Hz. | No | 150 |
 | window | int | The length of each segment for analysis (nfft). | No | 256 |
 | overlap | int | Number of overlapping points between segments. | No | 220 |
 
@@ -49,6 +49,7 @@ The CSC map is a bi-frequency representation that directly links **modulating fr
 * **Quantitative Selector Analysis:** The csc\_map output is further passed to the **Quantitative Parameterization Module** to calculate diagnostic selectors and selector-based enhanced envelope spectra. For example, a "Cyclic Frequency Kurtosis" selector is computed by measuring kurtosis along the carrier frequency axis for each cyclic frequency. The peaks in this selector automatically highlight the most impulsive and interesting alpha frequencies.
 * **Enhanced Envelope Spectrum Calculation:** This is a powerful technique. By using a selector to identify the optimal carrier frequency band, the csc\_map can be integrated along that band of the f axis. This produces an **enhanced envelope spectrum**—a 1D plot vs. alpha—that is far cleaner and more selective than one derived from a standard spectrogram.
 * **Targeted Filtering:** The identified carrier frequency f can be used to design a highly precise bandpass filter to isolate the fault signature from the original time-series signal.
+* **Decomposition:** The csc\_map can be used as input for nonnegative matrix decomposition (NMF) to separate and analyze individual fault components.
 
 ## **7\. Example Usage**
 ```

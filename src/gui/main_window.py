@@ -46,15 +46,9 @@ class App(ctk.CTk):
 
         # --- Grid Layout Configuration ---
         self.grid_columnconfigure(0, weight=0)
-        self.grid_columnconfigure(1, weight=4)
-        self.grid_columnconfigure(2, weight=4)
+        self.grid_columnconfigure(1, weight=1)
+        self.grid_columnconfigure(2, weight=1)
         self.grid_rowconfigure(0, weight=1)
-
-        # --- Header ---
-        # header = ctk.CTkFrame(self, fg_color="#1a202c", corner_radius=0)
-        # header.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 0))
-        # header_label = ctk.CTkLabel(header, text="AIDA: AI-Driven Analyzer        LORA: LLM-Orchestrated Research Agent", font=ctk.CTkFont(size=20, weight="bold"), text_color="#f7fafc")
-        # header_label.pack(pady=0)
 
         # --- Main Panels ---
         self._create_controls_panel()
@@ -78,6 +72,52 @@ class App(ctk.CTk):
         panel = ctk.CTkFrame(parent, fg_color="#1a202c", corner_radius=0, border_width=0, border_color="#2d3748")
         panel.grid(row=row, column=column, rowspan=rowspan, columnspan=columnspan, sticky="nsew", padx=0, pady=0)
         return panel
+    
+    def _optionmenu_callback(self, choice):
+        self.data_description_input.delete("1.0", "end")
+        self.objective_input.delete("1.0", "end")
+        match choice:
+            case "Kruszarka":
+                file_path = "data/kruszarka_real4_r4.mat"
+                objective = "The objective is to extract and visualize the presence of cyclic impulsive component indicating the local damage of the rolling-element bearing. The analysis can stop when the presence of the component of interest is confirmed and visualized."
+                description = "The data is a vibration signal sampled at 25 kHz, measured on the casing of the rolling element bearing. The theoretical fault frequency should be about 30.7 Hz. The carrier frequency band occupied by the component of interest should be separate from the band occupied by non-cyclic impulsive noise. The carrier frequency band occupied by the component of interest should be possible to observe on spectrogram or csc map."
+                self.objective_input.insert("0.0", objective)
+                self.data_description_input.insert("0.0", description)
+            case "Łożysko B":
+                file_path = "data/lozysko_b.mat"
+                objective = "The objective is to extract and visualize the presence of cyclic impulsive component indicating the local damage of the rolling-element bearing. The analysis can stop when the presence of the component of interest is confirmed and visualized."
+                description = "The data is a vibration signal sampled at 19.2 kHz, measured on the casing of the rolling element bearing. The theoretical fault frequency should be about 12.7 Hz. The carrier frequency band occupied by the component of interest should be possible to observe on spectrogram or csc map."
+                self.objective_input.insert("0.0", objective)
+                self.data_description_input.insert("0.0", description)
+            case "Przekładnia":
+                file_path = "data/przekladnia_2uszk.mat"
+                objective = "The objective is to extract the cyclic impulsive component indicating the presence of a local damage of the gear wheel in an industrial gearbox, or at least confirm its presence by clear visualization of relevant plots. Two such components might be present, related to two local faults occurring in two different wheels in the same gearbox. They will occupy different carrier frequency bands, but will have different modulation frequencies. The analysis can stop when the presence of at least one component of interest is confirmed and visualized. The two components can be identified separately or together in one result. The key is to separate them from each other,even if it is only one of them."
+                description = "The data is a vibration signal sampled at 8192 Hz, measured on the casing of the industrial gearbox in a belt conveyor drive station. The theoretical fault frequencies are unknown, so a clear harmonic pattern on envelope spectrum or csc map will be required to identify them. The carrier frequency bands occupied by the components of interest should be possible to observe on spectrogram or csc map."
+                self.objective_input.insert("0.0", objective)
+                self.data_description_input.insert("0.0", description)
+
+
+
+        try:
+            mat_data = scipy.io.loadmat(file_path)
+            # f = h5py.File('mytestfile.hdf5', 'r')
+        except:
+            mat_data = h5py.File(file_path, 'r')
+        varnames = [
+            k for k in mat_data.keys()
+            if not (k.startswith('__') and k.endswith('__'))
+        ]
+
+        # For each variable, convert it to a NumPy array and extract the first column.
+        # This assumes the data is stored in a 2D array where the signal is the first column.
+        # Using np.asarray is slightly more efficient as it avoids a copy if the object is already an array.
+        self.loaded_data = {
+            k: np.asarray(mat_data[k])[:, 0] for k in varnames
+        }
+        self.log_message("System", f"Successfully loaded data from {file_path}")
+        self.log_message("System", f"Found data keys: {', '.join(self.loaded_data.keys())}")
+        self._find_data_variables()
+
 
     def _create_controls_panel(self):
         controls_panel = self._create_panel(self, 0, 0)
@@ -93,8 +133,14 @@ class App(ctk.CTk):
         header1 = ctk.CTkLabel(controls_panel, text="1. Load data", font=ctk.CTkFont(size=14))
         header1.grid(row=2, column=0, sticky="w", padx=10, pady=2)
 
+        load_frame = ctk.CTkFrame(controls_panel, fg_color="transparent")
+        load_frame.grid(row=3, column=0, sticky="new", padx=20, pady=0)
+        load_frame.grid_columnconfigure(0, weight=1)
+        load_frame.grid_columnconfigure(1, weight=1)
+        load_frame.grid_rowconfigure(0, weight=1)
+
         # Load Data Button
-        self.load_data_btn = ctk.CTkButton(controls_panel,
+        self.load_data_btn = ctk.CTkButton(load_frame,
                                            text="Load Data File (.mat)",
                                            text_color="#f7fafc",
                                            command=self.load_data_file,
@@ -104,7 +150,20 @@ class App(ctk.CTk):
                                            image=self.load_icon,      # <--- PRZYPISZ IKONĘ
                                            font=ctk.CTkFont(family="Helvetica", size=20, weight="bold"))
         self.load_data_btn.configure(height=50)
-        self.load_data_btn.grid(row=3, column=0, sticky="ew", padx=30, pady=0)
+        self.load_data_btn.grid(row=0, column=0, sticky="ew", padx=10, pady=0)
+
+        # Load demo data selection dropdown
+        demo_data_options = ["Kruszarka", "Łożysko B", "Przekładnia"]
+        self.demo_data_var = ctk.StringVar(value=demo_data_options[0])
+        demo_data_dropdown = ctk.CTkOptionMenu(load_frame,
+                                               values=demo_data_options,
+                                               variable=self.demo_data_var,
+                                               command=self._optionmenu_callback,
+                                               fg_color=("#3182ce", "#3D5F7E"),
+                                            #    hover_color="#2b6cb0",
+                                               corner_radius=8,
+                                               font=ctk.CTkFont(family="Helvetica", size=16, weight="bold"))
+        demo_data_dropdown.grid(row=0, column=1, sticky="ew", padx=10, pady=0) 
 
         # Objective Input
         obj_label = ctk.CTkLabel(controls_panel, text="2. Analysis Objective:", font=ctk.CTkFont(size=14))
@@ -138,7 +197,6 @@ class App(ctk.CTk):
         self.start_btn = ctk.CTkButton(controls_panel, text="Start Analysis", command=self.on_start_analysis, fg_color=("#3182ce", "#3D5F7E"), hover_color="#2b6cb0", font=ctk.CTkFont(family="Helvetica", size=20, weight="bold"),image=self.play_icon)
         self.start_btn.configure(height=50)
         self.start_btn.grid(row=11, column=0, sticky="ew", pady=2, padx=30)
-
 
     def _create_visualization_panel(self):
         viz_panel = self._create_panel(self, 0, 1)
@@ -234,7 +292,6 @@ class App(ctk.CTk):
 
         analysis_thread = threading.Thread(target=self.orchestrator.run_analysis_pipeline)
         analysis_thread.start()
-        # self.orchestrator.delete_caches()
 
     def on_build_rag_index(self):
         """Opens a dialog to select the knowledge base directory and starts the RAG index build process."""
@@ -347,11 +404,8 @@ class App(ctk.CTk):
             self.log_message("System", f"Successfully loaded data from {file_path}")
             self.log_message("System", f"Found data keys: {', '.join(self.loaded_data.keys())}")
             # Optionally, populate the data description
-            self.data_description_input.delete("1.0", "end")
-            # self.data_description_input.insert("1.0", f"Loaded .mat file with variables: {', '.join(self.loaded_data.keys())},\n")
-
             self._find_data_variables()
-            # self.plot_time_series() # Removed: Plotting now handled by load_data action
+
 
         except Exception as e:
             self.log_message("System", f"Error loading file: {e}")
@@ -448,10 +502,12 @@ class App(ctk.CTk):
         # --- Dynamic Width Calculation ---
         font_bold = ctk.CTkFont(family="Arial", size=12, weight="bold")
         text_content = f"{action_id}: {tool_name}"
+        text_content2 = f"Output: {output_variable}"
         text_width = font_bold.measure(text_content)
+        text_width2 = font_bold.measure(text_content2)
 
         padding = 30  # 15px padding on each side
-        dynamic_block_width = max(self.flowchart_block_width, text_width + padding)
+        dynamic_block_width = max(self.flowchart_block_width, text_width + padding, text_width2 + padding)
 
         # --- Position Calculation ---
         x1 = self.flowchart_x_offset
@@ -495,7 +551,7 @@ class App(ctk.CTk):
         text_tool_id = canvas.create_text(x1 + dynamic_block_width / 2, y1 + self.flowchart_block_height / 3,
                                            text=text_content, fill="white", font=font_bold)
         text_output_id = canvas.create_text(x1 + dynamic_block_width / 2, y1 + 2 * self.flowchart_block_height / 3,
-                                           text=f"Output: {output_variable}", fill="#a0aec0", font=("Arial", 9))
+                                           text=text_content2, fill="#a0aec0", font=("Arial", 9))
 
         block_tag = f"block_{rect_id}"
         canvas.addtag_withtag(block_tag, rect_id)

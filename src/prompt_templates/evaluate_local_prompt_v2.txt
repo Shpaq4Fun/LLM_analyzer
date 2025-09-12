@@ -46,34 +46,14 @@ The JSON object should be formatted according to the template:
 
 Return only this JSON object as your answer. Retain the structure of the object as it will be statically parsed.
 
-General objective of the analysis: 
-{objective}
-
-Current action name: 
-{last_action_name}
+Previous actions: 
+{sequence_steps}
 
 Output evaluation parameters for current result: 
 {last_result_params}
 
-Previous actions: 
-{sequence_steps}
-
 History of results:
 {result_history}
 
-List of available tools for next actions: 
-{tools_list}
-
-Here is the information you must use for the support of evaluation:
-
 Current action documentation: 
 {last_action_documenation}
-
-Analysis scenario desctiption: 
-{metaknowledge}
-
-RAG context from knowledge base: 
-{rag_context}
-
-RAG context from tools documentation: 
-{rag_context_tools}

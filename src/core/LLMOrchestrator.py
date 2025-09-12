@@ -13,17 +13,20 @@ import google.generativeai as genai
 from difflib import SequenceMatcher
 import os
 import pickle
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
-from .prompt_assembler import PromptAssembler
 import json
+from datetime import datetime
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from .prompt_assembler import PromptAssembler
+from .ContextManager import ContextManager
 
 class LLMOrchestrator:
     def __init__(self, user_data_description, user_objective, run_id, loaded_data, signal_var_name, fs_var_name, log_queue):
         # 1. Initialize core components
         self.log_queue = log_queue
         self.prompt_assembler = PromptAssembler()
-        self.model_name = "gemini-2.5-pro" # Specific model version
+        self.context_manager = ContextManager()
+        self.model_name = "gemini-2.5-flash" # Specific model version
         self.model = genai.GenerativeModel(self.model_name)
 
         # Load the pre-built vector store from disk
@@ -40,19 +43,21 @@ class LLMOrchestrator:
             embedding_function=embedding_model
         )
         # Create a retriever interface for easy searching
-        self.rag_retriever = self.vector_store.as_retriever(search_kwargs={"k": 5}) # 'k' is number of results to return
-        self.rag_retriever_tools = self.vector_store_tools.as_retriever(search_kwargs={"k": 5}) # 'k' is number of results to return
+        self.rag_retriever = self.vector_store.as_retriever(search_kwargs={"k": 10}) # 'k' is number of results to return
+        self.rag_retriever_tools = self.vector_store_tools.as_retriever(search_kwargs={"k": 10}) # 'k' is number of results to return
         # 2. Initialize the state for this specific run
         self.run_id = run_id
         self.state_dir = f"./run_state/{self.run_id}"
         os.makedirs(self.state_dir, exist_ok=True) # Create a directory for this run's state files
 
-        # self._create_caches()
+        # No caching - each prompt is processed as a new request
+
         self.user_data_description = user_data_description
         self.user_objective = user_objective
         self.loaded_data = loaded_data
         self.signal_var_name = signal_var_name
         self.fs_var_name = fs_var_name
+        self.tools_reference = self._get_available_tools()
         self.metaknowledge = None  # Will be populated in the first step
         self.pipeline_steps = []   # This is our "script" as a list of Action objects
         self.result_history = []
@@ -62,11 +67,15 @@ class LLMOrchestrator:
     # --- Main Public Method ---
     def run_analysis_pipeline(self):
         """The main entry point to start the entire autonomous analysis process."""
-        final_script = []
+        # final_script = []
         # === PHASE 1: INITIALIZATION & FIRST ACTION ===
-        print("Phase 1: Initialization & First Action...")
+        # Inject the meta-template into the context at the beginning of the analysis
+        meta_template = self.prompt_assembler.templates['meta_template_prompt_v2']
+        self.context_manager.add_interaction(meta_template, "Initial context set.", self._get_metadata())
         self._create_metaknowledge()
-        
+        self.context_manager.add_interaction(str(self.metaknowledge), "Metaknowledge created.", self._get_metadata())
+        self.context_manager.add_interaction(self.tools_reference, "Tools list loaded.", self._get_metadata())
+
         # The first action is always loading the data
         initial_action = {
             "action_id": 0, # Action ID 0 for data loading
@@ -80,7 +89,7 @@ class LLMOrchestrator:
         }
         self.pipeline_steps.append(initial_action)
         # self.log_queue.put(("log", {"sender": "System", "message": f"--- PROPOSED STEP: {initial_action.get('tool_name')} ---"}))
-        
+
         # Execute the initial data loading action
         initial_result = self._execute_current_pipeline()
         # Send message to GUI to add this step to the flowchart and display its plot
@@ -90,21 +99,17 @@ class LLMOrchestrator:
             "output_variable": initial_action.get('output_variable'),
             "image_path": initial_result.get('image_path') # Pass the image path from the result
         }))
-        
+
         self.result_history.append(initial_result)
 
         # Evaluate the initial data loading action
         evaluation = self._evaluate_result(initial_result, initial_action)
-        # print(evaluation)
-        # self.log_queue.put(("log", {"sender": "System", "message": f"--- PROPOSED STEP: {json.dumps(evaluation, indent=4)} ---"}))
-        
-        # print(evaluation)
 
         # The original initial_action logic now becomes the first *proposed* analysis action
         first_analysis_action = self._fetch_next_action(evaluation)
         self.pipeline_steps.append(first_analysis_action)
         # self.log_queue.put(("log", {"sender": "System", "message": f"--- PROPOSED STEP: {first_analysis_action.get('tool_name')} ---"}))
-        
+
         second_result = self._execute_current_pipeline()
         # Send message to GUI for the first analysis action
         self.log_queue.put(("flowchart_add_step", {
@@ -114,27 +119,17 @@ class LLMOrchestrator:
             "image_path": second_result.get('image_path') # Pass the image path from the result
         }))
 
-        
         self.result_history.append(second_result)
-
         evaluation = self._evaluate_result(second_result, first_analysis_action)
-        
 
-        # final_script = self._translate_actions_to_code()
-        # self.log_queue.put(("log", {"sender": "Code Translator", "message": f"\n--- Python Script ---\n {final_script} \n--------------------------\n"}))
-        
         # === FULL IMPLEMENTATION: MAIN LOOP ===
-        print("Phase 2: Entering Main Loop...")
+        # print("Phase 2: Entering Main Loop...")
         for i in range(self.max_iterations):
-            print(f"--- Iteration {i+1} ---")
-            
             # 1. Propose the next action based on the last result
-            # last_result = self._execute_current_pipeline() # This will execute the *entire* pipeline up to this point
-            
             current_action = self._fetch_next_action(evaluation)
             self.pipeline_steps.append(current_action)
-            # self.log_queue.put(("log", {"sender": "System", "message": f"--- PROPOSED STEP: {current_action.get('tool_name')} ---"}))
             current_result = self._execute_current_pipeline()
+
             # Send message to GUI for subsequent analysis actions
             self.log_queue.put(("flowchart_add_step", {
                 "action_id": current_action.get('action_id'),
@@ -144,64 +139,66 @@ class LLMOrchestrator:
             }))
 
             # 2. Execute and evaluate the *new* state of the pipeline
-            
+
             self.result_history.append(current_result)
 
             evaluation = self._evaluate_result(current_result, current_action)
             # print(evaluation)
-            
+
+            if not json.loads(evaluation).get("is_useful"):
+                self.pipeline_steps.pop() # Remove the last action
+                self.result_history.pop() # Remove the last result
+                continue
 
             # return 0
             # 4. Check for termination condition
             if json.loads(evaluation).get("is_final"):
                 self.log_queue.put(("log", {"sender": "System", "message": f"--- ANALYSIS COMPLETE ---"}))
                 www = "\n\n".join(self.eval_history)
-                self.log_queue.put(("log", {"sender": "System", "message": f"--- REASONING HISTORY ---\n\n {www}\n ---\n"}))
-                # self.log_queue.put(("log", {"sender": "System", "message": f"--- THANK YOU FOR FLYING BIEDRONKA AIRLINES ---\n"}))
+                self.log_queue.put(("log", {"sender": "System", "message": f"--- REASONING HISTORY ---\n\n {www}\n ---"}))
+
+                # self.log_queue.put(("log", {"sender": "System", "message": f"--- THANK YOU FOR FLYING BIEDRONKA AIRLINES ---\\n"}))
                 break
-        
-        # # === FINAL OUTPUT ===
-        # print("Phase 3: Generating Final Script...")
-        # final_script = self._translate_actions_to_code()
-        # return final_script
-    
+
     # --- Private Helper Methods ---
-    def _generate_content_with_fallback(self, prompt):
+    def _get_metadata(self, action=None):
+        """Gathers metadata for the current context."""
+        metadata = {
+            'run_id': self.run_id,
+            'step_number': len(self.pipeline_steps),
+            'model_name': self.model_name,
+            'timestamp': f"run_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        }
+        if action:
+            metadata['tool_selected'] = action.get('tool_name')
+            metadata['parameters'] = action.get('params')
+        return metadata
+
+    def _generate_content_with_context(self, prompt, context_type="analysis", action=None):
         """
-        Attempts to generate content using the current model, falling back to other models if needed.
-        Returns the response object and logs the active model.
+        Generates content using the LLM with added conversation context.
         """
+        # The prompt is now the base prompt, and the context is managed separately.
+        contextual_prompt = self.context_manager.build_context(context_type, prompt)
+        
+        response = None
         try:
-            try:
-                response = self.model.generate_content(prompt)
-            except:
-                try:
-                    self.model_name = "gemini-2.5-flash"
-                    self.model = genai.GenerativeModel("gemini-2.5-flash")
-                    response = self.model.generate_content(prompt)
-                except:
-                    try:
-                        self.model_name = "gemini-2.0-pro"
-                        self.model = genai.GenerativeModel("gemini-2.0-pro")
-                        response = self.model.generate_content(prompt)
-                    except:
-                        try:
-                            self.model_name = "gemini-2.0-flash"
-                            self.model = genai.GenerativeModel("gemini-2.0-flash")
-                            response = self.model.generate_content(prompt)
-                        except:
-                            try:
-                                self.model_name = "gemini-1.5-pro"
-                                self.model = genai.GenerativeModel("gemini-1.5-pro")
-                                response = self.model.generate_content(prompt)
-                            except:
-                                self.model_name = "gemini-1.5-flash"
-                                self.model = genai.GenerativeModel("gemini-1.5-flash")
-                                response = self.model.generate_content(prompt)
+            # This logic can be simplified if model fallback is not a primary concern now.
+            response = self.model.generate_content(contextual_prompt)
             self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"--- ACTIVE MODEL: {self.model_name} ---"}))
+            
+            # Add interaction to history
+            metadata = self._get_metadata(action)
+            self.context_manager.add_interaction(prompt, response.text, metadata)
+            
             return response
         except Exception as e:
-            raise Exception(f"Error calling Gemini API: {e}")
+            self.log_queue.put(("log", {"sender": "LLM Orcheator (Error)", "message": f"Error calling Gemini API: {e}"}))
+            # Optionally add failed interaction to context
+            metadata = self._get_metadata(action)
+            metadata['error'] = str(e)
+            self.context_manager.add_interaction(prompt, "ERROR", metadata)
+            raise
 
     def _create_metaknowledge(self):
         """Uses a static prompt to convert user text into a structured JSON."""
@@ -212,26 +209,34 @@ class LLMOrchestrator:
             "user_analysis_objective": self.user_objective,
             "rag_retriever": self.rag_retriever,
             "rag_retriever_tools": self.rag_retriever_tools,
-            "tools_list": self._get_available_tools()
+            "tools_list": self.tools_reference
         }
-        
+
         prompt = self.prompt_assembler.build_prompt(
             prompt_type="METAKNOWLEDGE_CONSTRUCTION",
             context_bundle=context_bundle
         )
-        
+
         # Generation of the response by the LLM trying the best models first.
         try:
-            response = self._generate_content_with_fallback(prompt)
+            response = self._generate_content_with_context(prompt, context_type="metaknowledge")
             # Clean up the response text
+
+            metaknowledge_filename = os.path.join(self.state_dir, "metaknowledge.json")
             response_text = response.text.strip().replace('```json', '').replace('```', '')
+            with open(metaknowledge_filename, 'w') as f:
+                f.write(response_text)
+            self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"Metaknowledge saved to {metaknowledge_filename}"}))
+
+
             self.metaknowledge = json.loads(response_text)
+
             sss = json.dumps(self.metaknowledge, indent=4)
             if self.fs_var_name is None:
                 self.fs_var_name = 'fs'
                 self.loaded_data[self.fs_var_name] = int(self.metaknowledge['data_summary']['sampling_frequency_hz'])
             # print("-----------------------------")
-            self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"--- METAKNOWLEDGE RESPONSE ---\n {sss} \n--------------------------"}))
+            self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"--- METAKNOWLEDGE RESPONSE ---\n\n {sss} \n--------------------------"}))
 
         except Exception as e:
             print(f"Error calling Gemini API: {e}")
@@ -277,15 +282,16 @@ class LLMOrchestrator:
                     "params": {
                         "input_signal": input_variable, # Use the output of the load_data action
                         "image_path": os.path.join(self.state_dir, f"step_{len(self.pipeline_steps)}_spectrogram.png"),
-                        "window": 256,
-                        "noverlap": 220
+                        "window": 128,
+                        "noverlap": 110,
+                        "nfft": 256
                     },
                     "output_variable": f"spectrogram_{len(self.pipeline_steps)}"
                 }
                 for key in param_keys:
                     for key_orig in action['params'].keys():
                         ratio = SequenceMatcher(None, key, key_orig).ratio()
-                        print(f"Comparing {key} with {key_orig}: ratio {ratio}")
+                        # print(f"Comparing {key} with {key_orig}: ratio {ratio}")
                         if ratio > accept_ratio:
                             print(f"Replacing {key_orig} with the value from {key} ")
                             action['params'][key_orig] = params[key]
@@ -308,7 +314,7 @@ class LLMOrchestrator:
                 for key in param_keys:
                     for key_orig in action['params'].keys():
                         ratio = SequenceMatcher(None, key, key_orig).ratio()
-                        print(f"Comparing {key} with {key_orig}: ratio {ratio}")
+                        # print(f"Comparing {key} with {key_orig}: ratio {ratio}")
                         if ratio > accept_ratio:
                             print(f"Replacing {key_orig} with the value from {key} ")
                             action['params'][key_orig] = params[key]
@@ -330,7 +336,7 @@ class LLMOrchestrator:
                 for key in param_keys:
                     for key_orig in action['params'].keys():
                         ratio = SequenceMatcher(None, key, key_orig).ratio()
-                        print(f"Comparing {key} with {key_orig}: ratio {ratio}")
+                        # print(f"Comparing {key} with {key_orig}: ratio {ratio}")
                         if ratio > accept_ratio:
                             print(f"Replacing {key_orig} with the value from {key} ")
                             action['params'][key_orig] = params[key]
@@ -351,7 +357,7 @@ class LLMOrchestrator:
                 for key in param_keys:
                     for key_orig in action['params'].keys():
                         ratio = SequenceMatcher(None, key, key_orig).ratio()
-                        print(f"Comparing {key} with {key_orig}: ratio {ratio}")
+                        # print(f"Comparing {key} with {key_orig}: ratio {ratio}")
                         if ratio > accept_ratio:
                             print(f"Replacing {key_orig} with the value from {key} ")
                             action['params'][key_orig] = params[key]
@@ -372,7 +378,7 @@ class LLMOrchestrator:
                 for key in param_keys:
                     for key_orig in action['params'].keys():
                         ratio = SequenceMatcher(None, key, key_orig).ratio()
-                        print(f"Comparing {key} with {key_orig}: ratio {ratio}")
+                        # print(f"Comparing {key} with {key_orig}: ratio {ratio}")
                         if ratio > accept_ratio:
                             print(f"Replacing {key_orig} with the value from {key} ")
                             action['params'][key_orig] = params[key]
@@ -392,7 +398,7 @@ class LLMOrchestrator:
                 for key in param_keys:
                     for key_orig in action['params'].keys():
                         ratio = SequenceMatcher(None, key, key_orig).ratio()
-                        print(f"Comparing {key} with {key_orig}: ratio {ratio}")
+                        # print(f"Comparing {key} with {key_orig}: ratio {ratio}")
                         if ratio > accept_ratio:
                             print(f"Replacing {key_orig} with the value from {key} ")
                             action['params'][key_orig] = params[key]
@@ -411,7 +417,7 @@ class LLMOrchestrator:
                 for key in param_keys:
                     for key_orig in action['params'].keys():
                         ratio = SequenceMatcher(None, key, key_orig).ratio()
-                        print(f"Comparing {key} with {key_orig}: ratio {ratio}")
+                        # print(f"Comparing {key} with {key_orig}: ratio {ratio}")
                         if ratio > accept_ratio:
                             print(f"Replacing {key_orig} with the value from {key} ")
                             action['params'][key_orig] = params[key]
@@ -421,15 +427,15 @@ class LLMOrchestrator:
         """Translates the action list to code and executes it in a separate process."""
         import tempfile
         import subprocess
-        
+
         # Generate the script code
         script_code = self._translate_actions_to_code()
-        self.log_queue.put(("log", {"sender": "Prompt Translator", "message": f"--- GENERATED SCRIPT ---\n{script_code} \n--------------------------"}))
+        self.log_queue.put(("log", {"sender": "Prompt Translator", "message": f"--- GENERATED SCRIPT ---\n\n{script_code} \n--------------------------"}))
         # Create a temporary Python script file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False, dir=self.state_dir) as tmpfile:
             tmpfile.write(script_code)
             temp_script_path = tmpfile.name
-            
+
         try:
             python_executable = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), 'venv', 'Scripts', 'python.exe')
             command = [python_executable, temp_script_path]
@@ -439,9 +445,6 @@ class LLMOrchestrator:
             execution_result = {
                 'data': None,
                 'image_path': None
-                # 'raw_output': None,
-                # 'raw_error': None,
-                # 'return_code': None
             }
 
             try:
@@ -453,19 +456,19 @@ class LLMOrchestrator:
                     cwd=current_working_directory,  # Run from project root
                     timeout=1500 # Add a timeout of 60 seconds to prevent indefinite hanging
                 )
-                
+
                 result_path = os.path.join(self.state_dir, f"current_result_{self.run_id}.pkl")
                 with open(result_path, 'rb') as f:
                     result = pickle.load(f)
-                
-            
+
+
                 # Attempt to extract image_path from the script's output if available
                 image_path = None
                 try:
                     image_path = result.get('image_path')
                 except Exception as e:
                     self.log_queue.put(("log", {"sender": "LLM Orchestrator (Debug)", "message": f"Warning: Could not extract image path from script output: {e}"}))
-                
+
                 # Populate execution_result
                 execution_result = {
                     'data': result,
@@ -478,7 +481,7 @@ class LLMOrchestrator:
                     self.log_queue.put(("image_display", {"image_path": image_path}))
                 else:
                     self.log_queue.put(("log", {"sender": "System", "message": "No image path provided by the tool"}))
-                
+
             except subprocess.TimeoutExpired as e:
                 self.log_queue.put(("log", {"sender": "LLM Orchestrator (Error)", "message": f"Script execution timed out after {e.timeout} seconds.\nSTDOUT:\n{e.stdout}\nSTDERR:\n{e.stderr}"}))
                 raise # Re-raise the exception to propagate the failure
@@ -505,29 +508,31 @@ class LLMOrchestrator:
             "sequence_steps": self.pipeline_steps,
             "rag_retriever": self.rag_retriever,
             "rag_retriever_tools": self.rag_retriever_tools,
-            "tools_list": self._get_available_tools(),
+            "tools_list": self.tools_reference,
             "user_data_description": self.user_data_description,
             "user_analysis_objective": self.user_objective,
             "result_history": self.result_history
         }
-        
-        # 2. It calls the assembler to build the prompt
 
-        # 
-        # interpret last action and results
-        # powiedzieć o image_path i supporting_image_paths
+        # 2. It calls the assembler to build the prompt
 
         prompt = self.prompt_assembler.build_prompt(
             prompt_type="EVALUATE_LOCAL_CRITERION",
             context_bundle=context_bundle
         )
         try:
-            response = self._generate_content_with_fallback(prompt)
+            response = self._generate_content_with_context(prompt, context_type="evaluation", action=action_taken)
 
             # response = self.genai_client.models.generate_content(prompt)
             # aaa = json.dumps(response_text, indent=6)
             # Clean up the response text
             evaluation = response.text.strip().replace('```json', '').replace('```', '')
+
+            # TODO: Save the evaluation to a JSON file in the state directory for inspection
+            # evaluation_filename = os.path.join(self.state_dir, f"evaluation_{len(self.eval_history)}.json")
+            # with open(evaluation_filename, 'w') as f:
+            #     f.write(evaluation)
+            # self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"Evaluation saved to {evaluation_filename}"}))
 
             # text_description, self.proposed_action = self.extract_text_and_json(response_text)
             text_description = json.loads(evaluation).get('evaluation_summary')
@@ -535,15 +540,19 @@ class LLMOrchestrator:
             input_variable = json.loads(evaluation).get('input_variable')
             params = json.loads(evaluation).get("params")
             is_final = json.loads(evaluation).get("is_final")
+            if not is_final:
+                is_useful = json.loads(evaluation).get("is_useful")
+            else:
+                is_useful = 1
             justification = json.loads(evaluation).get("justification")
-            print(json.dumps(text_description, indent=4))
-            print(proposed_action)
+            # print(json.dumps(text_description, indent=4))
+            # print(proposed_action)
             # print(input_variable)
             # print(params)
             # print(params.keys())
             self.eval_history.append(text_description)
 
-            self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"--- RESULT EVALUATION RESPONSE ---\n Evaluation summary: {text_description} \n Proposed action: {json.dumps(proposed_action, indent=4)} \n Input variable: {input_variable} \n Justification: {justification} \n Custom parameters: {params} \n Action final: {is_final}\n--------------------------"}))
+            self.log_queue.put(("log", {"sender": "LLM Orchestrator", "message": f"--- RESULT EVALUATION RESPONSE ---\n Evaluation summary: {text_description} \n Proposed action: {json.dumps(proposed_action, indent=4)} \n Input variable: {input_variable} \n Justification: {justification} \n Custom parameters: {params} \n Action final: {is_final} \n Action useful: {is_useful} \n \n--------------------------"}))
 
         except Exception as e:
             print(f"Error calling Gemini API: {e}")
@@ -558,14 +567,14 @@ class LLMOrchestrator:
             with open(tools_reference_path, 'r', encoding='utf-8') as f:
                 tools_reference_content = f.read()
 
-            self.log_queue.put(("log", {"sender": "System", "message": f"--- TOOLS REFERENCE LOADED ---\n {tools_reference_path} \n"}))
+            self.log_queue.put(("log", {"sender": "System", "message": f"--- TOOLS REFERENCE LOADED ---\n\n {tools_reference_path} \n"}))
             return tools_reference_content
 
         except FileNotFoundError:
-            self.log_queue.put(("log", {"sender": "System", "message": f"--- ERROR: TOOLS REFERENCE FILE NOT FOUND ---\n {tools_reference_path} \n"}))
+            self.log_queue.put(("log", {"sender": "System", "message": f"--- ERROR: TOOLS REFERENCE FILE NOT FOUND ---\n\n {tools_reference_path} \n"}))
             return "Tools reference file not found."
         except Exception as e:
-            self.log_queue.put(("log", {"sender": "System", "message": f"--- ERROR LOADING TOOLS REFERENCE ---\n {str(e)} \n"}))
+            self.log_queue.put(("log", {"sender": "System", "message": f"--- ERROR LOADING TOOLS REFERENCE ---\n\n {str(e)} \n"}))
             return f"Error loading tools reference: {str(e)}"
 
     def _translate_actions_to_code(self):
@@ -583,7 +592,7 @@ class LLMOrchestrator:
             "# Add the project root to sys.path to enable absolute imports for the 'src' package",
             "sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))",
             "from src.core.quantitative_parameterization_module import calculate_quantitative_metrics",
-            "" # Add a blank line for readability
+            ""
         ]
 
         # Map tool names to their respective submodules
@@ -606,7 +615,7 @@ class LLMOrchestrator:
             tool_name = action.get('tool_name')
             if tool_name in tool_submodule_map:
                 needed_submodules.add(tool_submodule_map[tool_name])
-        
+
         # Add imports for the needed tools to the script
         # We need to import each tool function directly from its module
         for action in self.pipeline_steps:
@@ -640,7 +649,6 @@ class LLMOrchestrator:
         code_lines.append("with open(sampling_rate_path, 'rb') as f:")
         code_lines.append("    fs = int(pickle.load(f))")
         # Sampling rate can still be embedded directly as it's an int
-        # code_lines.append(f"{self.fs_var_name} = {actual_sampling_rate}")
         code_lines.append("") # Add a blank line for readability
 
         # 2. Loop through each action in the pipeline
@@ -667,7 +675,7 @@ class LLMOrchestrator:
                     # This is the crucial logic: we need to know if a value is a
                     # string literal or a reference to a variable from a previous step
                     # or a reference to the initial signal/fs variables.
-                    
+
                     is_variable_reference = False
                     if isinstance(value, str):
                         # Check if it's a reference to the initial signal/fs variables
@@ -683,10 +691,13 @@ class LLMOrchestrator:
                     if isinstance(value, str) and not is_variable_reference:
                         # It's a string literal, so wrap it in quotes
                         formatted_value = f"'{value}'"
+                    elif is_variable_reference:
+                        # It's a reference to another variable, so use it directly
+                        formatted_value = f"{value}"
                     else:
                         # It's a number, boolean, or a recognized variable reference, so use as-is
                         formatted_value = str(value)
-                    
+
                     # param_strings.append(f"{key}={formatted_value}")
                     param_strings.append(f"{formatted_value}")
 
@@ -696,22 +707,16 @@ class LLMOrchestrator:
             # 4. Construct the final line of code for this action
             output_var = action.get('output_variable', 'result')
             tool_name = action.get('tool_name', 'unknown_tool')
-            
+
             # Construct the final line of code for this action
             # Now that functions are imported directly, no submodule prefix is needed
             code_line = f"{output_var} = {tool_name}({params_str})"
             code_lines.append(code_line)
 
-            # # Ensure the image_path is in the dictionary before parameterization
-            # image_path_value = action.get('params', {}).get('image_path', 'None')
-            # if image_path_value != 'None':
-            #     code_lines.append(f"if '{output_var}' in locals() and isinstance({output_var}, dict):")
-            #     code_lines.append(f"    {output_var}['image_path'] = '{image_path_value}'")
-
             code_line = f"{output_var} = calculate_quantitative_metrics({output_var})"
             code_lines.append(code_line)
-            # code_lines.append(f'return {output_var}.get("image_path")') # Add a blank line for readability
             code_lines.append("") # Add a blank line
+
         code_lines.append("with open(result_path, 'wb') as f:")
         code_lines.append(f"    pickle.dump({output_var}, f)")
 

@@ -21,11 +21,11 @@ This tool is a fundamental first step for analyzing any time-varying or non-stat
 * **Domain / Context:** The output dictionary will contain the following keys:
   * `frequencies`: 1D NumPy array of the frequency bins.
   * `times`: 1D NumPy array of the time steps.
-  * `Sxx_db`: The 2D NumPy array (power, not in dB) for downstream use. The plot is rendered in dB.
+  * `Sxx_db`: The 2D NumPy array (magnitude, not in dB) for downstream use. The plot is rendered in dB.
   * `domain`: A string identifier, set to 'time-frequency-matrix'.
-  * `primary_data`: Set to 'Sxx_db'.
-  * `secondary_data`: Set to 'times'.
-  * `tertiary_data`: Set to 'frequencies'.
+  * `primary_data`: Set to 'Sxx'.
+  * `secondary_data`: Set to 'frequencies'.
+  * `tertiary_data`: Set to 'times'.
   * `sampling_rate`, `nperseg` (window), `noverlap`.
   * `original_phase`: The phase of the STFT.
   * `original_signal_data`: The original input signal.
@@ -37,8 +37,9 @@ This tool is a fundamental first step for analyzing any time-varying or non-stat
 | :---- | :---- | :---- | :---- | :---- |
 | data | dict | The dictionary containing the signal data and sampling rate. | Yes | None |
 | output\_dir | str | The directory where the output plot will be saved. | Yes | None |
-| window | int | The length of each segment (nperseg). | No | 1024 |
-| noverlap | int | Number of overlapping points between segments. | No | 800 |
+| window | int | The length of each segment (nperseg). | No | 128 |
+| noverlap | int | Number of overlapping points between segments. | No | 110 |
+| nfft | int | Length of the FFT used (nfft). | No | 256 |
 
 ## **6\. Next Steps Enabled**
 
@@ -56,7 +57,9 @@ spectrogram_action = {
     "params": {
         "data": loaded_data,
         "output_dir": "./outputs/run_xyz/",
-        "window": 512
+        "window": 128,
+        "noverlap": 110,
+        "nfft": 256
     },
     "output_variable": "spectrogram_results"
 }

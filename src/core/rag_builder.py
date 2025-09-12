@@ -10,10 +10,16 @@ RAGBuilder constructs and loads Chroma vector stores over a knowledge base.
 # src/core/rag_builder.py
 
 import os
+
+# Configure transformers to avoid TensorFlow imports
+os.environ['USE_TF'] = 'NO'
+os.environ['USE_TORCH'] = 'YES'
+
 from langchain_community.document_loaders import DirectoryLoader, PyPDFLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import Chroma
+from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_chroma import Chroma
+from sentence_transformers import SentenceTransformer
 
 class RAGBuilder:
     def __init__(self):
@@ -71,8 +77,9 @@ class RAGBuilder:
             model_name = f"sentence-transformers/{self.embedding_model}"
             model_kwargs = {'device': 'cpu'}
             encode_kwargs = {'normalize_embeddings': False}
+            client = SentenceTransformer(model_name) # Create a client instance
             embeddings = HuggingFaceEmbeddings(
-                model_name=model_name,
+                client=client, # Use the client instance
                 model_kwargs=model_kwargs,
                 encode_kwargs=encode_kwargs,
                 multi_process=True
@@ -102,14 +109,7 @@ class RAGBuilder:
 
         # The embedding function is needed to load the index
         model_name =  f"sentence-transformers/{self.embedding_model}"
-        model_kwargs = {'device': 'cpu'}
-        encode_kwargs = {'normalize_embeddings': False}
-        embeddings = HuggingFaceEmbeddings(
-            model_name=model_name,
-            model_kwargs=model_kwargs,
-            encode_kwargs=encode_kwargs,
-            multi_process=True
-        )
+        embeddings = HuggingFaceEmbeddings(model_name=model_name)
 
         self.index = Chroma(persist_directory=persist_directory, embedding_function=embeddings)
         return self.index
