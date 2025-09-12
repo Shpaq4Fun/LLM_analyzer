@@ -9,22 +9,39 @@ AIDA is an intelligent data analysis system that autonomously designs and execut
 ## 🎯 Key Features
 
 - **Autonomous Analysis**: LLM-driven pipeline orchestration with minimal human intervention
+- **Persistent Context Management**: Conversation history and learning capabilities for improved analysis consistency
 - **Multimodal Intelligence**: Visual analysis of results using Google Gemini's multimodal capabilities
 - **RAG-Enhanced**: Retrieval-Augmented Generation with domain-specific knowledge base
 - **Modular Tools**: Extensible toolkit for signal processing, transforms, and decomposition
 - **Interactive GUI**: User-friendly interface built with CustomTkinter
 - **Real-time Feedback**: Visual and quantitative evaluation of analysis results
+- **Iterative Learning**: System learns from previous analysis steps to improve consistency and decision-making
 
 ## 🏗️ System Architecture
 
 AIDA consists of several key components:
 
-- **LLM Orchestrator**: Central decision-making engine using Google Gemini
+- **LLM Orchestrator**: Central decision-making engine using Google Gemini with context management
+- **Context Manager**: Persistent conversation history and learning capabilities for improved analysis consistency
 - **RAG System**: Vector-based knowledge retrieval using ChromaDB and LangChain
 - **Tool Registry**: Modular analysis tools organized by category
 - **Code Translator**: Converts action sequences to executable Python scripts
 - **GUI Interface**: Interactive frontend for data loading and analysis monitoring
 - **Knowledge Base**: Curated domain expertise and documentation
+
+## 🆕 What's New
+
+### Recent Updates (Latest Commit)
+
+🎆 **Persistent Context Management Implementation**
+- Added `ContextManager` class for conversation history and state management
+- Enhanced `LLMOrchestrator` with context-aware LLM interactions
+- Improved analysis consistency through variable registry and context tracking
+- Foundation laid for future learning and adaptation capabilities
+- Context size management with configurable limits
+- Metadata tracking for better error recovery and debugging
+
+These changes transform AIDA from a stateless tool into an intelligent system that maintains memory across analysis steps, leading to more consistent and context-aware data analysis.
 
 ## 🚀 Quick Start
 
@@ -110,7 +127,8 @@ LLM_analyzer/
 ├── src/
 │   ├── app.py                 # Application entry point
 │   ├── core/                  # Core system components
-│   │   ├── LLMOrchestrator.py # Main orchestration logic
+│   │   ├── LLMOrchestrator.py # Main orchestration logic with context management
+│   │   ├── ContextManager.py  # Persistent context and conversation history
 │   │   ├── prompt_assembler.py # Prompt construction
 │   │   ├── rag_builder.py     # Knowledge base indexing
 │   │   └── authentication.py  # API authentication
@@ -139,11 +157,43 @@ LLM_analyzer/
 - **Extend Knowledge**: Add domain documents to `knowledge_base/`
 - **Modify Prompts**: Edit templates in `src/prompt_templates/`
 
+## 🧠 Persistent Context Management
+
+**NEW FEATURE**: AIDA now includes advanced persistent context management that enhances analysis consistency and enables learning from previous interactions.
+
+### Key Capabilities
+
+- **Conversation History**: Maintains a complete record of all LLM interactions within a session
+- **Variable Registry**: Tracks variable states and naming consistency across pipeline steps
+- **Contextual Prompts**: Injects relevant conversation history into LLM prompts
+- **Learning Foundation**: Establishes the groundwork for pattern recognition and iterative improvement
+- **Error Context**: Provides context-aware error recovery and debugging
+
+### Benefits
+
+- **Improved Consistency**: Maintains variable naming and analysis approaches across iterations
+- **Better Error Recovery**: Understands failure context to apply appropriate corrections
+- **Progressive Analysis**: Builds upon previous understanding rather than starting fresh
+- **Enhanced Decision Making**: Makes informed choices based on conversation history
+- **Foundation for Learning**: Prepares the system for future learning and adaptation capabilities
+
+### Implementation Details
+
+- **ContextManager**: New core component (`src/core/ContextManager.py`) that manages conversation history
+- **Enhanced LLMOrchestrator**: Integrated context-aware LLM interactions using `_generate_content_with_context()`
+- **Metadata Tracking**: Records interaction types, timestamps, and execution outcomes
+- **Context Formatting**: Intelligent context injection that prepends relevant history to prompts
+- **Memory Management**: Configurable context size limits (50KB default) to manage token usage
+
+This enhancement transforms AIDA from a stateless analysis tool into an intelligent system that learns and adapts throughout the analysis process.
+
 ## 📖 Documentation
 
 - [API Reference](src/docs/API_REFERENCE.md) - Complete API documentation
 - [Tools Reference](src/docs/TOOLS_REFERENCE.md) - Available analysis tools
 - [Concept Document](concept.md) - Detailed system design and architecture
+- [Persistent Context Implementation](PERSISTENT_CONTEXT_IMPLEMENTATION.md) - Detailed implementation plan and technical specifications for the context management system
+- [Project Description](PROJECT_DESCRIPTION.md) - Comprehensive project overview and technical analysis
 
 ## 🤝 Contributing
 
@@ -157,9 +207,10 @@ LLM_analyzer/
 
 ### LLM Integration
 - **Primary Model**: Google Gemini 2.5 Pro/Flash
-- **Context Window**: Up to 1 million tokens
+- **Context Window**: Up to 1 million tokens with persistent conversation history
 - **Multimodal**: Supports text and image analysis
 - **Fallback Models**: Automatic fallback to alternative Gemini versions
+- **Context Management**: Maintains conversation history and learns from previous interactions
 
 ### RAG System
 - **Embedding Model**: HuggingFace all-MiniLM-L12-v2
@@ -168,10 +219,11 @@ LLM_analyzer/
 - **Retrieval**: Top-k similarity search with configurable parameters
 
 ### Pipeline Execution
-- **Code Generation**: Dynamic Python script creation
+- **Code Generation**: Dynamic Python script creation with context awareness
 - **Subprocess Execution**: Isolated execution environment
-- **State Management**: Persistent state across pipeline steps
-- **Error Handling**: Robust error recovery and logging
+- **State Management**: Persistent state across pipeline steps with conversation history
+- **Context-Aware Processing**: Maintains variable naming consistency and learned patterns
+- **Error Handling**: Robust error recovery and logging with context-based error analysis
 
 ## 🧪 Example Workflow
 
@@ -210,9 +262,10 @@ python -c "from src.core.rag_builder import RAGBuilder; RAGBuilder().build_index
 ## 📊 Performance
 
 - **Analysis Speed**: Typically 2-5 minutes per pipeline
-- **Memory Usage**: ~500MB-2GB depending on data size
-- **Token Consumption**: ~10K-50K tokens per analysis
+- **Memory Usage**: ~500MB-2GB depending on data size (plus context storage)
+- **Token Consumption**: ~10K-50K tokens per analysis (enhanced with conversation context)
 - **Supported Data**: Up to 1M samples per signal
+- **Context Storage**: Persistent conversation history with 50KB limit per session
 
 ## 🔒 Security & Privacy
 
