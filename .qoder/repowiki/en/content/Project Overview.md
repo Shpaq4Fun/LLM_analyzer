@@ -221,7 +221,7 @@ class ContextManager {
 LLMOrchestrator --> PromptAssembler : "uses"
 LLMOrchestrator --> ContextManager : "uses"
 LLMOrchestrator --> Chroma : "queries"
-LLMOrchestrator --> "GUI" : "sends messages"
+LLMOrchestrator --> GUI : "sends messages"
 ```
 
 **Diagram sources**
