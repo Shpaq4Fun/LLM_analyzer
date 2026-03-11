@@ -1,4 +1,4 @@
-# AIDA - AI-Driven Analyzer
+# AIDA - AI Driven Analyzer
 
 **Autonomous LLM-Orchestrated Data Analysis Pipeline**
 
@@ -6,7 +6,9 @@ AIDA is an intelligent data analysis system that autonomously designs and execut
 
 ![System Architecture](./architecture.png)
 
-## 🎯 Key Features
+![Screenshot](./3.png)
+
+## 🎯 Key Features 
 
 - **Autonomous Analysis**: LLM-driven pipeline orchestration with minimal human intervention
 - **Persistent Context Management**: Conversation history and learning capabilities for improved analysis consistency
