@@ -6,7 +6,7 @@ AIDA is an intelligent data analysis system that autonomously designs and execut
 
 ![System Architecture](./architecture.png)
 
-![Screenshot](./3.png)
+![Screenshot](./3.PNG)
 
 ## 🎯 Key Features 
 
